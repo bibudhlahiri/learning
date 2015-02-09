@@ -12,11 +12,26 @@ using namespace std;
 
 struct eqstr
 {
-  bool operator()(const char* s1, const char* s2) const
+  bool operator()(string s1, string s2) const
   {
-    return strcmp(s1, s2) == 0;
+    return (s1 == s2);
   }
 };
+
+
+/*The following namespace ensures that the hash_map class works even with string, not 
+only const char**/
+namespace __gnu_cxx
+{
+	template<> struct hash< std::string >
+	{
+		size_t operator()( const std::string& x ) const
+		{
+		  return hash< const char* >()( x.c_str() );
+		}
+	};
+}
+
 
 static const char alphanum[] =
   "0123456789"
@@ -26,15 +41,14 @@ static const char alphanum[] =
 
 int stringLength = sizeof(alphanum) - 1;
 
-typedef hash_map<const char*, int, hash<const char*>, eqstr> HashMapForTest;
-typedef list<const char*> ListOfKeys;
+typedef hash_map<string, int, hash<string>, eqstr> HashMapForTest;
+typedef HashMapForTest::key_type KeyType;
+typedef list<KeyType> ListOfKeys;
 typedef HashMapForTest::iterator IterForKeys;
 
 class SpeedTest
 {
   HashMapForTest hashMapForTest;
-
-  //int stringLength;
   
   public:
     SpeedTest();
@@ -43,7 +57,7 @@ class SpeedTest
     {
       return alphanum[rand() % stringLength];
     }
-    void decrementFrequency(const char*);
+    void decrementFrequency(const KeyType&);
     void makeSinglePass();
     void testUpdateSpeed();
 
@@ -54,17 +68,16 @@ class SpeedTest
     for (IterForKeys iterForKeys = hashMapForTest.begin(); 
           iterForKeys != hashMapForTest.end(); ++iterForKeys)
     {
-      const char* key = iterForKeys->first; 
+      KeyType key = iterForKeys->first; 
       keySet.push_back(key);
     } 
  }
 
  SpeedTest::SpeedTest()
  {
-    
     //Populate the map with random <key, value> pairs
     srand(time(0));
-    for (int j = 0; j < 100; j++)
+    for (int j = 0; j < 10000; j++)
     {
       //Generate the key as a random string
       std::string key;
@@ -74,15 +87,13 @@ class SpeedTest
       }
       //Generate the frequency as a random integer between 1000 and 4999
       int frequency = rand() % 4000 + 1000;
-      cout << "Inserting key = " << key << ", frequency = " << frequency << endl;
-      hashMapForTest[key.c_str()] = frequency;
+      hashMapForTest[key] = frequency;
     }
  }
 
- void SpeedTest::decrementFrequency(const char* key)
+ void SpeedTest::decrementFrequency(const KeyType& key)
  {
     int frequency = hashMapForTest[key];
-    cout << "key = " << key << ", frequency = " << frequency << endl;
     frequency--;
     hashMapForTest[key] = frequency;
  }
@@ -92,24 +103,30 @@ class SpeedTest
   {
     ListOfKeys listOfKeys;
     getKeySet(listOfKeys);
+    int count = 0;
     while (!listOfKeys.empty())
     {
-       //Decrement the frequency of the key, pointed to by iterSecondAttr, by 1
-       const char* key = listOfKeys.front();
+       KeyType key = listOfKeys.front();
        decrementFrequency(key);
        listOfKeys.pop_front();
+       ++count;
     }
+    cout << "Processed " << count << " records" << endl;
   }
 
   void SpeedTest::testUpdateSpeed()
   {
     int nIter = 100;
+    double sumTime = 0;
     for (int j = 0; j < nIter; j++)
     {
       clock_t startTime = clock();
       makeSinglePass();
-      cout << double( clock() - startTime ) / (double)CLOCKS_PER_SEC<< " seconds." << endl;
+      double timeTaken = double(clock() - startTime)/(double)CLOCKS_PER_SEC;
+      cout << timeTaken << " seconds" << endl;
+      sumTime += timeTaken;
     }
+    cout << "Avg time to update tuples = " << (double)sumTime/(double)nIter << " seconds" << endl;
   }
 
 
