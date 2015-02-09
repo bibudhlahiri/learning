@@ -58,10 +58,10 @@ class SpeedTest
       return alphanum[rand() % stringLength];
     }
     void decrementFrequency(const KeyType&);
+    int getCountOfKey(const KeyType&);
     void makeSinglePass();
     void testUpdateSpeed();
-
-  };
+};
 
  void SpeedTest::getKeySet(ListOfKeys& keySet)
  {
@@ -77,7 +77,7 @@ class SpeedTest
  {
     //Populate the map with random <key, value> pairs
     srand(time(0));
-    for (int j = 0; j < 10000; j++)
+    for (int j = 0; j < 3000; j++)
     {
       //Generate the key as a random string
       std::string key;
@@ -85,9 +85,13 @@ class SpeedTest
       {
         key += genRandom();
       }
-      //Generate the frequency as a random integer between 1000 and 4999
-      int frequency = rand() % 4000 + 1000;
+      //Generate the frequency as a random integer between 10 and 4999
+      int frequency = rand() % 4000 + 10;
       hashMapForTest[key] = frequency;
+      /*if (frequency < 100)
+      {
+        cout << "key with low freq is " << key << endl;
+      }*/
     }
  }
 
@@ -98,20 +102,44 @@ class SpeedTest
     hashMapForTest[key] = frequency;
  }
 
+ int SpeedTest::getCountOfKey(const KeyType& key)
+ {
+    return hashMapForTest[key];
+ }
+
 
  void SpeedTest::makeSinglePass()
   {
     ListOfKeys listOfKeys;
     getKeySet(listOfKeys);
     int count = 0;
+    ListOfKeys keysToDelete;
+
     while (!listOfKeys.empty())
     {
        KeyType key = listOfKeys.front();
        decrementFrequency(key);
+       /*Average reduced from 0.00850618 seconds to 0.00840847 seconds when call to decrementFrequency 
+         was replaced by three lines directly
+       int frequency = hashMapForTest[key];
+       frequency--;
+       hashMapForTest[key] = frequency;*/
+       
+       if (getCountOfKey(key) == 0)
+       {
+         keysToDelete.push_back(key);
+       }
        listOfKeys.pop_front();
        ++count;
     }
-    cout << "Processed " << count << " records" << endl;
+    //cout << "Processed " << count << " records" << endl;
+    while (!keysToDelete.empty())
+    {
+      KeyType key = keysToDelete.front();
+      hashMapForTest.erase(key);
+      //cout << "Erasing key " << key << endl;
+      keysToDelete.pop_front();	
+    }
   }
 
   void SpeedTest::testUpdateSpeed()
@@ -123,9 +151,14 @@ class SpeedTest
       clock_t startTime = clock();
       makeSinglePass();
       double timeTaken = double(clock() - startTime)/(double)CLOCKS_PER_SEC;
-      cout << timeTaken << " seconds" << endl;
+      //cout << timeTaken << " seconds" << endl;
       sumTime += timeTaken;
     }
+    /*Without dropping the keys whose frequencies drop to 0, avg time with 10,000 pairs: 0.00850618 seconds. 
+      Avg time with 5,000 pairs: 0.00409858 seconds.
+      Avg time with 3,000 pairs: 0.00245966 seconds.
+
+    /With dropping the keys whose frequencies drop to 0, avg time with 3,000 pairs: 0.00288443 seconds.*/
     cout << "Avg time to update tuples = " << (double)sumTime/(double)nIter << " seconds" << endl;
   }
 
