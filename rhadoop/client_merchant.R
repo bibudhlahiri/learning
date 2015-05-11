@@ -5,6 +5,12 @@ Sys.setenv(HADOOP_CMD = "/Users/blahiri/hadoop/hadoop-2.7.0/bin/hadoop")
 
 library(rmr2)
 
+rmr.options(backend = "hadoop")  
+hdfs.data.root = "client_merchant"
+hdfs.data = file.path(hdfs.data.root, "input")
+hdfs.out.root = hdfs.data.root
+hdfs.out = file.path(hdfs.out.root, "output")
+
 n_clients <- 100
 n_merchants <- 500
 k <- 10
@@ -31,30 +37,28 @@ client_high_val_merchant = to.dfs(client_high_val_merchant)
 map1 = function(., client_merchant) {
           keyval(client_merchant$client_id, paste(client_merchant$merchant_id, "_", client_merchant$purchase_vol, sep = ""))
        }
-reduce1 = function(client, 
-system("rm -r /Users/blahiri/learning/rhadoop/client_others")
-mrjob1 = mapreduce(input = client_high_val_merchant, output = "/Users/blahiri/learning/rhadoop/client_others/", output.format = "csv", map = map1) 
-
-
-map2 = function(., client_others) {
-   for (other1 in client_others)
+reduce1 = function(client, merchant_purchase) {
+  for (other1 in merchant_purchase)
    {
-     for (other2 in client_others)
+     for (other2 in merchant_purchase)
      {
-       cat(paste("other1 = ", other1, ", other2 = ", other2, "\n", sep = ""), file = stderr())
+       cat(paste("client = ", client, ", other1 = ", other1, ", other2 = ", other2, "\n", sep = ""), file = stderr())
        split1 = unlist(strsplit(other1, "_"))
        merchant1 = split1[1]; purchase1 = split1[2]
+       cat(paste("merchant1 = ", merchant1, ", purchase1 = ", purchase1, "\n", sep = ""), file = stderr())
        split2 = unlist(strsplit(other2, "_"))
        merchant2 = split2[1]; purchase2 = split2[2]
+       cat(paste("merchant2 = ", merchant2, ", purchase2 = ", purchase2, "\n", sep = ""), file = stderr())
        if (merchant1 != merchant2)
        {
-         keyval(paste(merchant1, merchant2, "_", sep = ""), as.numeric(purchase1)*as.numeric(purchase2))
+         str_key = paste(merchant1, "_", merchant2, sep = "")
+         num_val = as.numeric(purchase1)*as.numeric(purchase2)
+         cat(paste("str_key = ", str_key, ", num_val = ", num_val, "\n", sep = ""), file = stderr())
+         return(keyval(str_key, num_val))
        }
      }
    }
 }
 system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_products")
-mrjob2 = mapreduce(input = "/Users/blahiri/learning/rhadoop/client_others/", input.format = make.input.format("csv", sep = "\t"), 
-                 output = "/Users/blahiri/learning/rhadoop/merchant_pair_products/", output.format = "csv", map = map2)
-#rmerchant_pair_products <- from.dfs(mrjob2)
-
+mrjob1 = mapreduce(input = client_high_val_merchant, output = "/Users/blahiri/learning/rhadoop/merchant_pair_products/", output.format = "csv", map = map1, reduce = reduce1)
+results <- from.dfs(input = "/Users/blahiri/learning/rhadoop/merchant_pair_products/")
