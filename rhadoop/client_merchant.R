@@ -31,15 +31,17 @@ client_high_val_merchant = to.dfs(client_high_val_merchant)
 map1 = function(., client_merchant) {
           keyval(client_merchant$client_id, paste(client_merchant$merchant_id, "_", client_merchant$purchase_vol, sep = ""))
        }
-mrjob1 = mapreduce(input = client_high_val_merchant, map = map1)
-client_others <- from.dfs(mrjob1)
-client_others = to.dfs(client_others)
+reduce1 = function(client, 
+system("rm -r /Users/blahiri/learning/rhadoop/client_others")
+mrjob1 = mapreduce(input = client_high_val_merchant, output = "/Users/blahiri/learning/rhadoop/client_others/", output.format = "csv", map = map1) 
 
-map2 = function(client, merchant_purchase) {
-   for (other1 in merchant_purchase)
+
+map2 = function(., client_others) {
+   for (other1 in client_others)
    {
-     for (other2 in merchant_purchase)
+     for (other2 in client_others)
      {
+       cat(paste("other1 = ", other1, ", other2 = ", other2, "\n", sep = ""), file = stderr())
        split1 = unlist(strsplit(other1, "_"))
        merchant1 = split1[1]; purchase1 = split1[2]
        split2 = unlist(strsplit(other2, "_"))
@@ -51,6 +53,8 @@ map2 = function(client, merchant_purchase) {
      }
    }
 }
-mrjob2 = mapreduce(input = mrjob1, map = map2)
-merchant_pair_products <- from.dfs(mrjob2)
+system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_products")
+mrjob2 = mapreduce(input = "/Users/blahiri/learning/rhadoop/client_others/", input.format = make.input.format("csv", sep = "\t"), 
+                 output = "/Users/blahiri/learning/rhadoop/merchant_pair_products/", output.format = "csv", map = map2)
+#rmerchant_pair_products <- from.dfs(mrjob2)
 
