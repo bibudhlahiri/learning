@@ -38,25 +38,33 @@ map1 = function(., client_merchant) {
           keyval(client_merchant$client_id, paste(client_merchant$merchant_id, "_", client_merchant$purchase_vol, sep = ""))
        }
 reduce1 = function(client, merchant_purchase) {
+  #Initialize a collection data structure to store all tuples for a given client
+  clients_bag = list()
   for (other1 in merchant_purchase)
    {
      for (other2 in merchant_purchase)
      {
-       cat(paste("client = ", client, ", other1 = ", other1, ", other2 = ", other2, "\n", sep = ""), file = stderr())
+       #cat(paste("client = ", client, ", other1 = ", other1, ", other2 = ", other2, "\n", sep = ""), file = stderr())
        split1 = unlist(strsplit(other1, "_"))
        merchant1 = split1[1]; purchase1 = split1[2]
-       cat(paste("merchant1 = ", merchant1, ", purchase1 = ", purchase1, "\n", sep = ""), file = stderr())
+       #cat(paste("merchant1 = ", merchant1, ", purchase1 = ", purchase1, "\n", sep = ""), file = stderr())
        split2 = unlist(strsplit(other2, "_"))
        merchant2 = split2[1]; purchase2 = split2[2]
-       cat(paste("merchant2 = ", merchant2, ", purchase2 = ", purchase2, "\n", sep = ""), file = stderr())
+       #cat(paste("merchant2 = ", merchant2, ", purchase2 = ", purchase2, "\n", sep = ""), file = stderr())
        if (merchant1 != merchant2)
        {
          str_key = paste(merchant1, "_", merchant2, sep = "")
          num_val = as.numeric(purchase1)*as.numeric(purchase2)
-         cat(paste("str_key = ", str_key, ", num_val = ", num_val, "\n", sep = ""), file = stderr())
-         return(keyval(str_key, num_val))
+         #cat(paste("str_key = ", str_key, ", num_val = ", num_val, "\n", sep = ""), file = stderr())
+         clients_bag[[str_key]] <- num_val
        }
      }
+   }
+   n = length(clients_bag)
+   for (i in 1:n)
+   {
+      cat(paste("n = ", n, ", i = ", i, "\n", sep = ""), file = stderr())
+      return(keyval(names(clients_bag)[i], clients_bag[[i]]))
    }
 }
 system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_products")
