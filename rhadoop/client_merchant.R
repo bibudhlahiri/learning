@@ -58,30 +58,45 @@ reduce1 = function(client, merchant_purchase) {
        }
      }
    }
-   return(keyval(client, clients_bag))
+   keyval(client, clients_bag)
 }
 system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_products")
 mrjob1 = mapreduce(input = client_high_val_merchant, output = "/Users/blahiri/learning/rhadoop/merchant_pair_products/", 
                    output.format = make.output.format(format = "csv", mode = "text", sep = ","), 
                    map = map1, reduce = reduce1)
-#results <- from.dfs(input = "/Users/blahiri/learning/rhadoop/merchant_pair_products/")
+
 
 asa.csv.input.format = make.input.format(format='csv', mode='text', streaming.format = NULL, sep=',',
 										 col.names = c('client', 'merchant_pair_product'),
 										 stringsAsFactors=F)
 library(stringr)
 map2 = function(., merchant_pair_products) {
-          #Input value to mapper function is a data frame
+          #Input value to mapper function (merchant_pair_products) is a data frame
           df <- as.data.frame(str_split_fixed(merchant_pair_products$merchant_pair_product, "_", 3))
           colnames(df) <- c("merchant1", "merchant2", "product")
           keyval(paste(df$merchant1, "_", df$merchant2, sep = ""), df$product)
        }
 reduce2 = function(merchant_pair, product) {
   #Since product was originally a vector of factor variables, had to cast to characters before converting to numeric.
-  return(keyval(merchant_pair, sum(as.numeric(as.character(product)))))
+  keyval(merchant_pair, sum(as.numeric(as.character(product))))
 }
 system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_dot_product")
 mrjob2 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_pair_products/",  
                    input.format = asa.csv.input.format,
                    output = "/Users/blahiri/learning/rhadoop/merchant_pair_dot_product/", 
                    output.format = "csv", map = map2, reduce = reduce2)
+                   
+                   
+map3 = function(., client_merchant) {
+          keyval(client_merchant$merchant_id, client_merchant$purchase_vol)
+       }
+reduce3 = function(merchant_id, purchase_vol) {
+  #Initialize a collection data structure to store all tuples for a given client
+  num_purchase_vol <- as.numeric(as.character(purchase_vol))
+  purchase_vol_square <- num_purchase_vol^2
+  keyval(merchant_id, sqrt(sum(purchase_vol_square)))
+}
+system("rm -r /Users/blahiri/learning/rhadoop/merchant_l2_norms")
+mrjob3 = mapreduce(input = client_high_val_merchant, output = "/Users/blahiri/learning/rhadoop/merchant_l2_norms/", 
+                   output.format = make.output.format(format = "csv", mode = "text", sep = ","), 
+                   map = map3, reduce = reduce3)
