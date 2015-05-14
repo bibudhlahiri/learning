@@ -78,17 +78,7 @@ map2 = function(., merchant_pair_products) {
        }
 reduce2 = function(merchant_pair, product) {
   #Since product was originally a vector of factor variables, had to cast to characters before converting to numeric.
-  product <- as.numeric(as.character(product))
-  n <- length(product)
-  dot_product <- 0
-  for (i in 1:n)
-  {
-    dot_product <- dot_product + product[i]
-    cat(paste("merchant_pair = ", merchant_pair, ", product[i] = ", product[i], ", dot_product = ", dot_product, "\n", sep = ""), file = stderr())
-  }
-  #dot_product = sum(as.numeric(product))
-  cat(paste("merchant_pair = ", merchant_pair, ", dot_product = ", dot_product, "\n", sep = ""), file = stderr())
-  return(keyval(merchant_pair, dot_product))
+  return(keyval(merchant_pair, sum(as.numeric(as.character(product)))))
 }
 system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_dot_product")
 mrjob2 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_pair_products/",  
