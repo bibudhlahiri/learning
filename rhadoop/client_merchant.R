@@ -129,9 +129,37 @@ colnames(merchant_pair_dot_products) <- c("merchant_pair", "dot_product")
 merchant_pair_dot_products$dot_product <- paste("d_", merchant_pair_dot_products$dot_product, sep = "")
 system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_all_inputs")
 system("mkdir /Users/blahiri/learning/rhadoop/merchant_pair_all_inputs")
-write.table(merchant_pair_dot_products, "/Users/blahiri/learning/rhadoop/merchant_pair_all_inputs/merchant_pair_dot_products", row.names = FALSE, col.names = FALSE)
+write.table(merchant_pair_dot_products, "/Users/blahiri/learning/rhadoop/merchant_pair_all_inputs/merchant_pair_dot_products", row.names = FALSE, col.names = FALSE, sep = ",")
 
 merchant_pair_l2_norms <- read.csv("/Users/blahiri/learning/rhadoop/merchant_pair_l2_norms/part-00000", header = FALSE)
 colnames(merchant_pair_l2_norms) <- c("merchant_pair", "l2_norms")
 merchant_pair_l2_norms$l2_norms <- paste("l_", merchant_pair_l2_norms$l2_norms, sep = "")
-write.table(merchant_pair_l2_norms, "/Users/blahiri/learning/rhadoop/merchant_pair_all_inputs/merchant_pair_l2_norms", row.names = FALSE, col.names = FALSE)
+write.table(merchant_pair_l2_norms, "/Users/blahiri/learning/rhadoop/merchant_pair_all_inputs/merchant_pair_l2_norms", row.names = FALSE, col.names = FALSE, sep = ",")
+
+csv.input.format3 = make.input.format(format='csv', mode='text', streaming.format = NULL, sep=',',
+									  col.names = c('merchant_pair', 'other_info'),
+									  stringsAsFactors=F)
+map5 = function(., merchant_pair_all_inputs){
+  keyval(merchant_pair_all_inputs$merchant_pair, merchant_pair_all_inputs$other_info)
+}
+reduce5 = function(merchant_pair, other_info){
+  #Identify the type of info (dot product or L2 norms) based on the prefix
+  dot_product <- other_info[(substr(other_info, 1, 2) == "d_")]
+  dot_product <- substr(dot_product, 3, nchar(dot_product))
+  if (length(dot_product) == 0)  #Not all pairs of merchants will have a dot product because the clients purchasing from them may be disjoint
+     dot_product <- 0
+  l2_norms <- other_info[(substr(other_info, 1, 2) == "l_")]
+  split = unlist(strsplit(l2_norms, "_"))
+  l2_norm1 = split[2]
+  l2_norm2 = split[3]
+  cosine_sim = as.numeric(dot_product)/(as.numeric(l2_norm1)*as.numeric(l2_norm2))
+  cat(paste("merchant_pair = ", merchant_pair, ", dot_product = ", dot_product, ", l2_norm1 = ", l2_norm1, ", l2_norm2 = ", l2_norm2, ", cosine_sim = ", cosine_sim, "\n", sep = ""), file = stderr())
+  keyval(merchant_pair, cosine_sim)
+}
+system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_cosine_sim")
+mrjob5 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_pair_all_inputs/", 
+                   input.format = csv.input.format3,
+                   output = "/Users/blahiri/learning/rhadoop/merchant_pair_cosine_sim/", 
+                   output.format = make.output.format(format = "csv", mode = "text", sep = ","), 
+                   map = map5, reduce = reduce5)
+
