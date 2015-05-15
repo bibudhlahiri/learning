@@ -124,27 +124,14 @@ mrjob4 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_l2_norms/",
                    
 #Copy the dot products and the L2 norms for merchant pairs to a common location. Tag them to indicate the filetype. 
 #They will be taken from this location for computing the final cosine similarity.
-csv.input.format3 = make.input.format(format='csv', mode='text', streaming.format = NULL, sep=',',
-									  col.names = c('merchant_pair', 'dot_product'),
-									  stringsAsFactors=F)
-map5 = function(., merchant_pair_dot_products){
-  keyval(merchant_pair_dot_products$merchant_pair, paste("d_", merchant_pair_dot_products$dot_product, sep = ""))
-}
-mrjob5 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_pair_dot_product/", 
-                   input.format = csv.input.format3,
-                   output = "/Users/blahiri/learning/rhadoop/merchant_pair_all_inputs/", 
-                   output.format = make.output.format(format = "csv", mode = "text", sep = ","), 
-                   map = map5)
-                   
-csv.input.format4 = make.input.format(format='csv', mode='text', streaming.format = NULL, sep=',',
-									  col.names = c('merchant_pair', 'l2_norms'),
-									  stringsAsFactors=F)
-map6 = function(., merchant_pair_l2_norms){
-  keyval(merchant_pair_l2_norms$merchant_pair, paste("l_", merchant_pair_l2_norms$l2_norms, sep = ""))
-}
-mrjob6 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_pair_l2_norms/", 
-                   input.format = csv.input.format4,
-                   output = "/Users/blahiri/learning/rhadoop/merchant_pair_all_inputs/", 
-                   output.format = make.output.format(format = "csv", mode = "text", sep = ","), 
-                   map = map6)
+merchant_pair_dot_products <- read.csv("/Users/blahiri/learning/rhadoop/merchant_pair_dot_product/part-00000", header = FALSE)
+colnames(merchant_pair_dot_products) <- c("merchant_pair", "dot_product")
+merchant_pair_dot_products$dot_product <- paste("d_", merchant_pair_dot_products$dot_product, sep = "")
+system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_all_inputs")
+system("mkdir /Users/blahiri/learning/rhadoop/merchant_pair_all_inputs")
+write.table(merchant_pair_dot_products, "/Users/blahiri/learning/rhadoop/merchant_pair_all_inputs/merchant_pair_dot_products", row.names = FALSE, col.names = FALSE)
 
+merchant_pair_l2_norms <- read.csv("/Users/blahiri/learning/rhadoop/merchant_pair_l2_norms/part-00000", header = FALSE)
+colnames(merchant_pair_l2_norms) <- c("merchant_pair", "l2_norms")
+merchant_pair_l2_norms$l2_norms <- paste("l_", merchant_pair_l2_norms$l2_norms, sep = "")
+write.table(merchant_pair_l2_norms, "/Users/blahiri/learning/rhadoop/merchant_pair_all_inputs/merchant_pair_l2_norms", row.names = FALSE, col.names = FALSE)
