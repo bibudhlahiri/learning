@@ -49,7 +49,7 @@ reduce1 = function(client, merchant_purchase) {
        merchant1 = split1[1]; purchase1 = split1[2]  
        split2 = unlist(strsplit(other2, "_"))
        merchant2 = split2[1]; purchase2 = split2[2]
-       if (merchant1 < merchant2)  # < ensures one pair of merchants appears exactly once for a client
+       if (as.numeric(merchant1) < as.numeric(merchant2))  # < ensures one pair of merchants appears exactly once for a client
        {
          str_key = paste(merchant1, "_", merchant2, sep = "")
          num_val = as.numeric(purchase1)*as.numeric(purchase2)
@@ -66,7 +66,7 @@ mrjob1 = mapreduce(input = client_high_val_merchant, output = "/Users/blahiri/le
                    map = map1, reduce = reduce1)
 
 
-asa.csv.input.format = make.input.format(format='csv', mode='text', streaming.format = NULL, sep=',',
+csv.input.format1 = make.input.format(format='csv', mode='text', streaming.format = NULL, sep=',',
 										 col.names = c('client', 'merchant_pair_product'),
 										 stringsAsFactors=F)
 library(stringr)
@@ -82,21 +82,43 @@ reduce2 = function(merchant_pair, product) {
 }
 system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_dot_product")
 mrjob2 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_pair_products/",  
-                   input.format = asa.csv.input.format,
+                   input.format = csv.input.format1,
                    output = "/Users/blahiri/learning/rhadoop/merchant_pair_dot_product/", 
-                   output.format = "csv", map = map2, reduce = reduce2)
+                   output.format = make.output.format(format = "csv", mode = "text", sep = ","),
+                   map = map2, reduce = reduce2)
                    
                    
 map3 = function(., client_merchant) {
           keyval(client_merchant$merchant_id, client_merchant$purchase_vol)
        }
 reduce3 = function(merchant_id, purchase_vol) {
-  #Initialize a collection data structure to store all tuples for a given client
+  
   num_purchase_vol <- as.numeric(as.character(purchase_vol))
   purchase_vol_square <- num_purchase_vol^2
-  keyval(merchant_id, sqrt(sum(purchase_vol_square)))
+  keyval(merchant_id, round(sqrt(sum(purchase_vol_square)), 2))
 }
 system("rm -r /Users/blahiri/learning/rhadoop/merchant_l2_norms")
 mrjob3 = mapreduce(input = client_high_val_merchant, output = "/Users/blahiri/learning/rhadoop/merchant_l2_norms/", 
                    output.format = make.output.format(format = "csv", mode = "text", sep = ","), 
                    map = map3, reduce = reduce3)
+                   
+csv.input.format2 = make.input.format(format='csv', mode='text', streaming.format = NULL, sep=',',
+									  col.names = c('merchant_id', 'l2_norm'),
+									  stringsAsFactors=F)
+
+map4 = function(., merchant_l2_norms){
+  cat(paste("from map4, class(merchant_l2_norms$merchant_id) = ", class(merchant_l2_norms$merchant_id), "\n", sep = ""), file = stderr())
+  copy <- merchant_l2_norms
+  colnames(copy) <- c("merchant_id1", "l2_norm1")
+  cartesian_product <- merge(merchant_l2_norms, copy)
+  pairs <- subset(cartesian_product, (merchant_id < merchant_id1))
+  pairs$merchant_pair <- paste(pairs$merchant_id, "_", pairs$merchant_id1, sep = "")
+  pairs <- pairs[, c("merchant_pair", "l2_norm", "l2_norm1")]
+  keyval(pairs$merchant_pair, paste(pairs$l2_norm, "_", pairs$l2_norm1, sep = ""))
+}
+system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_l2_norms")
+mrjob4 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_l2_norms/", 
+                   input.format = csv.input.format2,
+                   output = "/Users/blahiri/learning/rhadoop/merchant_pair_l2_norms/", 
+                   output.format = make.output.format(format = "csv", mode = "text", sep = ","), 
+                   map = map4)
