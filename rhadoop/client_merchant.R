@@ -92,7 +92,6 @@ map3 = function(., client_merchant) {
           keyval(client_merchant$merchant_id, client_merchant$purchase_vol)
        }
 reduce3 = function(merchant_id, purchase_vol) {
-  
   num_purchase_vol <- as.numeric(as.character(purchase_vol))
   purchase_vol_square <- num_purchase_vol^2
   keyval(merchant_id, round(sqrt(sum(purchase_vol_square)), 2))
@@ -107,7 +106,7 @@ csv.input.format2 = make.input.format(format='csv', mode='text', streaming.forma
 									  stringsAsFactors=F)
 
 map4 = function(., merchant_l2_norms){
-  cat(paste("from map4, class(merchant_l2_norms$merchant_id) = ", class(merchant_l2_norms$merchant_id), "\n", sep = ""), file = stderr())
+  #cat(paste("from map4, class(merchant_l2_norms$merchant_id) = ", class(merchant_l2_norms$merchant_id), "\n", sep = ""), file = stderr())
   copy <- merchant_l2_norms
   colnames(copy) <- c("merchant_id1", "l2_norm1")
   cartesian_product <- merge(merchant_l2_norms, copy)
@@ -122,3 +121,30 @@ mrjob4 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_l2_norms/",
                    output = "/Users/blahiri/learning/rhadoop/merchant_pair_l2_norms/", 
                    output.format = make.output.format(format = "csv", mode = "text", sep = ","), 
                    map = map4)
+                   
+#Copy the dot products and the L2 norms for merchant pairs to a common location. Tag them to indicate the filetype. 
+#They will be taken from this location for computing the final cosine similarity.
+csv.input.format3 = make.input.format(format='csv', mode='text', streaming.format = NULL, sep=',',
+									  col.names = c('merchant_pair', 'dot_product'),
+									  stringsAsFactors=F)
+map5 = function(., merchant_pair_dot_products){
+  keyval(merchant_pair_dot_products$merchant_pair, paste("d_", merchant_pair_dot_products$dot_product, sep = ""))
+}
+mrjob5 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_pair_dot_product/", 
+                   input.format = csv.input.format3,
+                   output = "/Users/blahiri/learning/rhadoop/merchant_pair_all_inputs/", 
+                   output.format = make.output.format(format = "csv", mode = "text", sep = ","), 
+                   map = map5)
+                   
+csv.input.format4 = make.input.format(format='csv', mode='text', streaming.format = NULL, sep=',',
+									  col.names = c('merchant_pair', 'l2_norms'),
+									  stringsAsFactors=F)
+map6 = function(., merchant_pair_l2_norms){
+  keyval(merchant_pair_l2_norms$merchant_pair, paste("l_", merchant_pair_l2_norms$l2_norms, sep = ""))
+}
+mrjob6 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_pair_l2_norms/", 
+                   input.format = csv.input.format4,
+                   output = "/Users/blahiri/learning/rhadoop/merchant_pair_all_inputs/", 
+                   output.format = make.output.format(format = "csv", mode = "text", sep = ","), 
+                   map = map6)
+
