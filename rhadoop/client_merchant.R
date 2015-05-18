@@ -21,16 +21,18 @@ high_vol_upper_limit <- 100
 
 #Assign each client to one of k clusters
 clients <- data.frame(id = 1:n_clients, cluster = sample(1:k, n_clients, replace = TRUE))
+print(clients)
 #Pick the subset of p high-value merchants for each cluster and store it somewhere
 high_val_merchants <- lapply(as.list(1:k), function(x) sample(1:n_merchants, p))
+print(high_val_merchants)
 #Get the high-value merchants for each client
 out = to.dfs(keyval(rep(clients$id, each = p), unlist(high_val_merchants[clients$cluster])))
 client_high_val_merchant = as.data.frame(from.dfs(out))
 colnames(client_high_val_merchant) <- c("client_id", "merchant_id")
 #Assign high value to these merchants for these clients
-#client_high_val_merchant$purchase_vol <- sample(high_vol_lower_limit:high_vol_upper_limit, nrow(client_high_val_merchant), replace = TRUE)
 client_high_val_merchant = as.data.frame(keyval(client_high_val_merchant, sample(high_vol_lower_limit:high_vol_upper_limit, nrow(client_high_val_merchant), replace = TRUE)))
 colnames(client_high_val_merchant) <- c("client_id", "merchant_id", "purchase_vol")
+print(client_high_val_merchant)
 client_high_val_merchant = to.dfs(client_high_val_merchant)
 
 #Compute the cosine similarity between all pairs of clients/merchants(?)
@@ -153,7 +155,6 @@ reduce5 = function(merchant_pair, other_info){
   l2_norm1 = split[2]
   l2_norm2 = split[3]
   cosine_sim = as.numeric(dot_product)/(as.numeric(l2_norm1)*as.numeric(l2_norm2))
-  cat(paste("merchant_pair = ", merchant_pair, ", dot_product = ", dot_product, ", l2_norm1 = ", l2_norm1, ", l2_norm2 = ", l2_norm2, ", cosine_sim = ", cosine_sim, "\n", sep = ""), file = stderr())
   keyval(merchant_pair, cosine_sim)
 }
 system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_cosine_sim")
@@ -162,4 +163,35 @@ mrjob5 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_pair_all_in
                    output = "/Users/blahiri/learning/rhadoop/merchant_pair_cosine_sim/", 
                    output.format = make.output.format(format = "csv", mode = "text", sep = ","), 
                    map = map5, reduce = reduce5)
+                   
+csv.input.format4 = make.input.format(format='csv', mode='text', streaming.format = NULL, sep=',',
+									  col.names = c('merchant_pair', 'cosine_sim'),
+									  stringsAsFactors=F)
+map6 = function(., merchant_pair_cosine_sim){
+  merchant_pair_cosine_sim <- subset(merchant_pair_cosine_sim, (as.numeric(as.character(cosine_sim)) > 0))
+  #cat(paste("merchant_pair_cosine_sim$merchant_pair = ", merchant_pair_cosine_sim$merchant_pair, "\n", sep = ""), file = stderr())
+  df <- as.data.frame(str_split_fixed(merchant_pair_cosine_sim$merchant_pair, "_", 2))
+  colnames(df) <- c("merchant1", "merchant2")
+  #cat(paste("df$merchant1 = ", df$merchant1, ", df$merchant2 = ", df$merchant2, "\n", sep = ""), file = stderr())
+  df$merchant1 <- sprintf("%03s", df$merchant1)
+  df$merchant2 <- sprintf("%03s", df$merchant2)
+  distances <- 1 - as.numeric(as.character(merchant_pair_cosine_sim$cosine_sim)) 
+  cat(paste("df$merchant1 = ", df$merchant1, ", df$merchant2 = ", df$merchant2, ", distances = ", distances, "\n", sep = ""), file = stderr())
+  keyval(paste(df$merchant1, "_", distances, sep = ""), df$merchant2)
+}
+reduce6 = function(merchant1_distance, merchant2) {
+  
+  merchant1_distance_bag = c()
+  for (mer in merchant2)
+  {
+     merchant1_distance_bag <- c(merchant1_distance_bag, mer)
+  }
+  keyval(merchant1_distance, merchant1_distance_bag)
+}
+system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_distance_ordered")
+mrjob6 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_pair_cosine_sim/", 
+                   input.format = csv.input.format4,
+                   output = "/Users/blahiri/learning/rhadoop/merchant_pair_distance_ordered/", 
+                   output.format = make.output.format(format = "csv", mode = "text", sep = ","), 
+                   map = map6, reduce = reduce6)
 
