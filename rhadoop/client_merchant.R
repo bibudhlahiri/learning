@@ -169,24 +169,16 @@ csv.input.format4 = make.input.format(format='csv', mode='text', streaming.forma
 									  stringsAsFactors=F)
 map6 = function(., merchant_pair_cosine_sim){
   merchant_pair_cosine_sim <- subset(merchant_pair_cosine_sim, (as.numeric(as.character(cosine_sim)) > 0))
-  #cat(paste("merchant_pair_cosine_sim$merchant_pair = ", merchant_pair_cosine_sim$merchant_pair, "\n", sep = ""), file = stderr())
   df <- as.data.frame(str_split_fixed(merchant_pair_cosine_sim$merchant_pair, "_", 2))
   colnames(df) <- c("merchant1", "merchant2")
-  #cat(paste("df$merchant1 = ", df$merchant1, ", df$merchant2 = ", df$merchant2, "\n", sep = ""), file = stderr())
   df$merchant1 <- sprintf("%03s", df$merchant1)
   df$merchant2 <- sprintf("%03s", df$merchant2)
   distances <- 1 - as.numeric(as.character(merchant_pair_cosine_sim$cosine_sim)) 
-  cat(paste("df$merchant1 = ", df$merchant1, ", df$merchant2 = ", df$merchant2, ", distances = ", distances, "\n", sep = ""), file = stderr())
-  keyval(paste(df$merchant1, "_", distances, sep = ""), df$merchant2)
+  keyval(df$merchant1, paste(distances, "_", df$merchant2, sep = ""))
 }
-reduce6 = function(merchant1_distance, merchant2) {
-  
-  merchant1_distance_bag = c()
-  for (mer in merchant2)
-  {
-     merchant1_distance_bag <- c(merchant1_distance_bag, mer)
-  }
-  keyval(merchant1_distance, merchant1_distance_bag)
+reduce6 = function(merchant1, distance_merchant2) {
+  cat(paste("merchant1 = ", merchant1, ", length(distance_merchant2) = ", length(distance_merchant2), "\n", sep = ""), file = stderr())
+  keyval(merchant1, sort(distance_merchant2))
 }
 system("rm -r /Users/blahiri/learning/rhadoop/merchant_pair_distance_ordered")
 mrjob6 = mapreduce(input = "/Users/blahiri/learning/rhadoop/merchant_pair_cosine_sim/", 
