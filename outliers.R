@@ -2,6 +2,8 @@ library(data.table)
 library(cluster)
 
 elem_idx <- 1 
+row_idx <- 1
+curr_row <- 1
 
 load_avalon_data <- function()
 {
@@ -27,7 +29,7 @@ load_avalon_data <- function()
             "T1 CODE NAME", "T2 CODE NAME", "FUNCTION CODE NAME", "COUNTRY/DIST CODE NAME",
             "TIRE MAKER", "ENG PLANT CODE NAME", "ENG TYPE")
   avalon_data[,(cols) := lapply(.SD, as.factor), .SDcols = cols]
-  #print(class(avalon_data[['REPAIR STATE CODE NAME']])) #With space in column names, refer to them as 
+  #With space in column names, refer to them as 
   #avalon_data[['REPAIR STATE CODE NAME']] or avalon_data[, `REPAIR STATE CODE NAME`]
   pairwise_dist <- as.matrix(daisy(avalon_data, "gower"))
   
@@ -43,6 +45,13 @@ load_avalon_data <- function()
   #May be more than k if there are ties.
   k_neighborhood_sizes <- apply(pairwise_dist, 1, 
                                 function(x) find_k_neighborhood_size(x, k_distances))
+  local_reachability_densities <- apply(pairwise_dist, 1, 
+                                        function(x) find_local_reachability_density(x, k_distances, 
+                                                                                    reachability_distances, 
+                                                                                    k_neighborhood_sizes))
+  local_outlier_factors <- apply(pairwise_dist, 1, 
+                                 function(x) find_local_outlier_factor(x, k_distances, local_reachability_densities, 
+                                                                       k_neighborhood_sizes))
 }
 
 find_k_neighborhood_size <- function(all_neighbors, k_distances)
@@ -52,5 +61,35 @@ find_k_neighborhood_size <- function(all_neighbors, k_distances)
   ret_value
 }
 
+find_local_reachability_density <- function(all_neighbors, k_distances, reachability_distances, k_neighborhood_sizes)
+{
+  #Find the indices of the k nearest neighbors of the current data point, and pull the reachability distance of the 
+  #current element from those neighbors.
+  kNN_indices <- which(all_neighbors <= k_distances[row_idx])
+  kNN_indices <- kNN_indices[kNN_indices != row_idx]
+  kNN_indices <- as.numeric(kNN_indices)
+  
+  sum_reachability_distances <- sum(reachability_distances[row_idx, kNN_indices])
+  ret_value <- k_neighborhood_sizes[row_idx]/sum_reachability_distances
+  row_idx <<- row_idx + 1
+  ret_value
+}
 
-k_neighborhood_sizes <- load_avalon_data()
+find_local_outlier_factor <- function(all_neighbors, k_distances, local_reachability_densities, k_neighborhood_sizes)
+{
+  kNN_indices <- which(all_neighbors <= k_distances[curr_row])
+  kNN_indices <- kNN_indices[kNN_indices != curr_row]
+  kNN_indices <- as.numeric(kNN_indices)
+  
+  sum_lrd <- sum(local_reachability_densities[kNN_indices])
+  lrd_curr_point <- local_reachability_densities[curr_row]
+  ret_value <- sum_lrd/(k_neighborhood_sizes[curr_row]*lrd_curr_point)
+  cat(paste("curr_row = ", curr_row, ", sum_lrd = ", sum_lrd, 
+            ", k_neighborhood_sizes[curr_row] = ", k_neighborhood_sizes[curr_row], 
+            ", lrd_curr_point = ", lrd_curr_point, "\n", sep = ""))
+  curr_row <<- curr_row + 1
+  ret_value
+}
+
+
+local_outlier_factors <- load_avalon_data()
