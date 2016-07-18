@@ -4,6 +4,7 @@ library(cluster)
 elem_idx <- 1 
 row_idx <- 1
 curr_row <- 1
+curr_idx_among_outliers <- 1
 
 load_avalon_data <- function()
 {
@@ -52,6 +53,7 @@ load_avalon_data <- function()
   local_outlier_factors <- apply(pairwise_dist, 1, 
                                  function(x) find_local_outlier_factor(x, k_distances, local_reachability_densities, 
                                                                        k_neighborhood_sizes))
+  rd_from_kNNs_for_outliers <- analyze_outliers(local_outlier_factors, k_distances, pairwise_dist, reachability_distances)
 }
 
 find_k_neighborhood_size <- function(all_neighbors, k_distances)
@@ -84,12 +86,47 @@ find_local_outlier_factor <- function(all_neighbors, k_distances, local_reachabi
   sum_lrd <- sum(local_reachability_densities[kNN_indices])
   lrd_curr_point <- local_reachability_densities[curr_row]
   ret_value <- sum_lrd/(k_neighborhood_sizes[curr_row]*lrd_curr_point)
-  cat(paste("curr_row = ", curr_row, ", sum_lrd = ", sum_lrd, 
-            ", k_neighborhood_sizes[curr_row] = ", k_neighborhood_sizes[curr_row], 
-            ", lrd_curr_point = ", lrd_curr_point, "\n", sep = ""))
   curr_row <<- curr_row + 1
   ret_value
 }
 
+#Take the outliers (LOF value above a threshold) and get an explanation of why they are outliers. 
+#Pick their reachability distance values from their k nearest neighbors, and these should be 
+#in general higher than the average/median values since the outliers are on average "far" from their 
+#nearest neighbors compared to normal points. Confirm that the reachability distance values are high because 
+#the outliers are far away from their neighbors (rd_k(A,B) = max(k_distance(B), d(A, B))) and check 
+#what makes the outliers far from their k nearest neighbors.
+analyze_outliers <- function(local_outlier_factors, k_distances, pairwise_dist, reachability_distances)
+{
+  lof_threshold <- 1.5
+  outlier_indices <- as.numeric(which(local_outlier_factors > lof_threshold))
+  cat(paste("length(outlier_indices) = ", length(outlier_indices), "\n", sep = ""))
+  #print(outlier_indices)
+  
+  #Get the distance to the k-th NN for all outliers
+  k_distances_for_outliers <- k_distances[outlier_indices]
+  #print(k_distances_for_outliers)
+  #Get the indices of the k-th NNs for all outliers from pairwise_dist matrix
+  pairwise_dist_for_outliers <- pairwise_dist[outlier_indices,]
+  reachability_distances_for_outliers <- reachability_distances[outlier_indices,]
+  rd_from_kNNs_for_outliers <- apply(pairwise_dist_for_outliers, 1, 
+                                function(x) get_rd_from_kNNs_for_outliers(x, k_distances_for_outliers, reachability_distances_for_outliers))
+  
+}
 
-local_outlier_factors <- load_avalon_data()
+#For a given outlier, gets its reachability distance values from its k NNs. So returns k numbers for an outlier.
+get_rd_from_kNNs_for_outliers <- function(outliers_neighbors, k_distances_for_outliers, reachability_distances_for_outliers)
+{
+  kNN_indices <- which(outliers_neighbors <= k_distances_for_outliers[curr_idx_among_outliers])
+  kNN_indices <- kNN_indices[kNN_indices != curr_idx_among_outliers]
+  kNN_indices <- as.numeric(kNN_indices)
+  cat(paste("curr_idx_among_outliers = ", curr_idx_among_outliers, "\n", sep = ""))
+  print(kNN_indices)
+  ret_vector <- reachability_distances_for_outliers[curr_idx_among_outliers, kNN_indices]
+  print(ret_vector)
+  curr_idx_among_outliers <<- curr_idx_among_outliers + 1
+  ret_vector
+}
+
+#fivenum(pairwise_dist) 0.0000000 0.3393090 0.4186019 0.5001053 0.8609580 - Bimodal distribution
+rd_from_kNNs_for_outliers <- load_avalon_data()
