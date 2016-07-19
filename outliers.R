@@ -35,29 +35,39 @@ load_avalon_data <- function()
   avalon_data
 }
 
+outliers_by_knn <- c()
+
 #Find the top-ranking elements whose distances from their k-th NNs are the highest
 find_knn_outliers <- function()
 {
   avalon_data <- load_avalon_data()
-  pairwise_dist <- as.matrix(daisy(avalon_data, "gower"))
-  
+  pairwise_dist <- as.matrix(daisy(avalon_data, "gower"))  
   nearest_neighbors <- t(apply(t(pairwise_dist),2,sort))
   max_k <- 20
   matr_kNN_distances <- nearest_neighbors[, 2:(max_k + 1)]
   indices_by_knn_distances <- apply(matr_kNN_distances, 2, 
-                                  function(x) get_indices_by_knn_distances(x))
+                                    function(x) get_indices_by_knn_distances(x))
   index_threshold <- 100 #Till what index do we go?
   #Take the top index_threshold elements from each column, i.e., if index_threshold = 100, 
   #then we are taking the top 100 elements whose distances with their 1st NN are the highest, 
   #then the top 100 elements whose distances with their 2nd NN are the highest, and so on. 
   #Take the intersection of all such elements.
-  indices_by_knn_distances
+  indices_by_knn_distances <- indices_by_knn_distances[1:index_threshold,]
+  outliers_by_knn <<- indices_by_knn_distances[,1]
+  apply(indices_by_knn_distances[, -1], 2, function(x) combine_columns_for_outliers(x))
+  outliers_by_knn
 }
 
 get_indices_by_knn_distances <- function(distances_with_kNN)
 {
-  #rev(rank(distances_with_kNN, ties.method = "random"))
   sort(distances_with_kNN, decreasing = TRUE, index.return=TRUE)$ix
+}
+
+combine_columns_for_outliers <- function(index_column)
+{
+  #cat(paste("length(outliers_by_knn) before intersect = ", length(outliers_by_knn), "\n", sep = ""))
+  outliers_by_knn <<- intersect(outliers_by_knn, index_column)
+  #cat(paste("length(outliers_by_knn) after intersect = ", length(outliers_by_knn), "\n", sep = ""))
 }
 
 find_lof_outliers <- function()
@@ -175,4 +185,4 @@ get_rd_from_kNNs_for_outliers <- function(outliers_neighbors, outlier_indices, k
 
 #fivenum(pairwise_dist) 0.0000000 0.3393090 0.4186019 0.5001053 0.8609580 - Bimodal distribution
 #rd_from_kNNs_for_outliers <- load_avalon_data()
-indices_by_knn_distances <- find_knn_outliers()
+outliers_by_knn <- find_knn_outliers()
