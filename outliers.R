@@ -32,12 +32,44 @@ load_avalon_data <- function()
   avalon_data[,(cols) := lapply(.SD, as.factor), .SDcols = cols]
   #With space in column names, refer to them as 
   #avalon_data[['REPAIR STATE CODE NAME']] or avalon_data[, `REPAIR STATE CODE NAME`]
+  avalon_data
+}
+
+#Find the top-ranking elements whose distances from their k-th NNs are the highest
+find_knn_outliers <- function()
+{
+  avalon_data <- load_avalon_data()
+  pairwise_dist <- as.matrix(daisy(avalon_data, "gower"))
+  
+  nearest_neighbors <- t(apply(t(pairwise_dist),2,sort))
+  max_k <- 20
+  matr_kNN_distances <- nearest_neighbors[, 2:(max_k + 1)]
+  indices_by_knn_distances <- apply(matr_kNN_distances, 2, 
+                                  function(x) get_indices_by_knn_distances(x))
+  index_threshold <- 100 #Till what index do we go?
+  #Take the top index_threshold elements from each column, i.e., if index_threshold = 100, 
+  #then we are taking the top 100 elements whose distances with their 1st NN are the highest, 
+  #then the top 100 elements whose distances with their 2nd NN are the highest, and so on. 
+  #Take the intersection of all such elements.
+  indices_by_knn_distances
+}
+
+get_indices_by_knn_distances <- function(distances_with_kNN)
+{
+  #rev(rank(distances_with_kNN, ties.method = "random"))
+  sort(distances_with_kNN, decreasing = TRUE, index.return=TRUE)$ix
+}
+
+find_lof_outliers <- function()
+{
+  avalon_data <- load_avalon_data()
   pairwise_dist <- as.matrix(daisy(avalon_data, "gower"))
   
   k <- 10
   nearest_neighbors <- t(apply(t(pairwise_dist),2,sort))
   
   k_distances <- nearest_neighbors[, (k + 1)] #Holds the distance to the k-th NN for each data point
+  print(names(sort(k_distances, decreasing = TRUE))[1:15]) #"3"   "92"  "548" "835" "401" "5"   "118" "930" "6"   "261" "2"   "977" "904" "982" "9"
   
   reachability_distances <- matrix(mapply(function(x, j) max(k_distances[j], x), pairwise_dist, col(pairwise_dist)),
                                    nrow = nrow(pairwise_dist)) 
@@ -53,6 +85,8 @@ load_avalon_data <- function()
   local_outlier_factors <- apply(pairwise_dist, 1, 
                                  function(x) find_local_outlier_factor(x, k_distances, local_reachability_densities, 
                                                                        k_neighborhood_sizes))
+  cat("Fivenum of local_outlier_factors is\n")
+  print(fivenum(local_outlier_factors))
   rd_from_kNNs_for_outliers <- analyze_outliers(local_outlier_factors, k_distances, pairwise_dist, reachability_distances)
 }
 
@@ -98,35 +132,47 @@ find_local_outlier_factor <- function(all_neighbors, k_distances, local_reachabi
 #what makes the outliers far from their k nearest neighbors.
 analyze_outliers <- function(local_outlier_factors, k_distances, pairwise_dist, reachability_distances)
 {
-  lof_threshold <- 1.5
+  lof_threshold <- 1.8
   outlier_indices <- as.numeric(which(local_outlier_factors > lof_threshold))
-  cat(paste("length(outlier_indices) = ", length(outlier_indices), "\n", sep = ""))
-  #print(outlier_indices)
   
+  cat("outlier_indices\n")
+  print(outlier_indices) #With lof_threshold = 1.8, outlier_indices: 1   2   9  28 118 194 261 311 548 594 645 835 930 977 982
+   
   #Get the distance to the k-th NN for all outliers
   k_distances_for_outliers <- k_distances[outlier_indices]
-  #print(k_distances_for_outliers)
+  
+  print(fivenum(k_distances))
+  print(fivenum(k_distances_for_outliers))
+  
   #Get the indices of the k-th NNs for all outliers from pairwise_dist matrix
   pairwise_dist_for_outliers <- pairwise_dist[outlier_indices,]
   reachability_distances_for_outliers <- reachability_distances[outlier_indices,]
-  rd_from_kNNs_for_outliers <- apply(pairwise_dist_for_outliers, 1, 
-                                function(x) get_rd_from_kNNs_for_outliers(x, k_distances_for_outliers, reachability_distances_for_outliers))
   
+  rd_from_kNNs_for_outliers <- apply(pairwise_dist_for_outliers, 1, 
+                                function(x) get_rd_from_kNNs_for_outliers(x, outlier_indices, k_distances_for_outliers, reachability_distances_for_outliers))
+    
+  cat("fivenum for rd_from_kNNs_for_outliers is\n")
+  print(fivenum(rd_from_kNNs_for_outliers))
+  cat("fivenum for general reachability_distances is\n")
+  print(fivenum(reachability_distances))
+  rd_from_kNNs_for_outliers
 }
 
 #For a given outlier, gets its reachability distance values from its k NNs. So returns k numbers for an outlier.
-get_rd_from_kNNs_for_outliers <- function(outliers_neighbors, k_distances_for_outliers, reachability_distances_for_outliers)
+get_rd_from_kNNs_for_outliers <- function(outliers_neighbors, outlier_indices, k_distances_for_outliers, reachability_distances_for_outliers)
 {
   kNN_indices <- which(outliers_neighbors <= k_distances_for_outliers[curr_idx_among_outliers])
-  kNN_indices <- kNN_indices[kNN_indices != curr_idx_among_outliers]
-  kNN_indices <- as.numeric(kNN_indices)
-  cat(paste("curr_idx_among_outliers = ", curr_idx_among_outliers, "\n", sep = ""))
-  print(kNN_indices)
+  
+  #The original index of the given outlier should be removed from kNN_indices. As we need the original index, we need to 
+  #pull it from outlier_indices.
+  kNN_indices <- kNN_indices[kNN_indices != outlier_indices[curr_idx_among_outliers]]
+  kNN_indices <- as.numeric(kNN_indices)  
+  
   ret_vector <- reachability_distances_for_outliers[curr_idx_among_outliers, kNN_indices]
-  print(ret_vector)
   curr_idx_among_outliers <<- curr_idx_among_outliers + 1
   ret_vector
 }
 
 #fivenum(pairwise_dist) 0.0000000 0.3393090 0.4186019 0.5001053 0.8609580 - Bimodal distribution
-rd_from_kNNs_for_outliers <- load_avalon_data()
+#rd_from_kNNs_for_outliers <- load_avalon_data()
+indices_by_knn_distances <- find_knn_outliers()
