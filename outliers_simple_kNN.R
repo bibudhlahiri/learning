@@ -71,7 +71,7 @@ combine_columns_for_outliers <- function(index_column)
   outliers_by_knn <<- intersect(outliers_by_knn, index_column)
 }
 
-pairwise_dist <- find_knn_outliers()
+#pairwise_dist <- find_knn_outliers()
 
 analyze_outliers <- function()
 {
@@ -93,12 +93,16 @@ analyze_outliers <- function()
   #The 6th element (rank 2) is the 1st NN with a distace of 0.1517397.
   
   avalon_data[2, ]
-  #Row 2 is as follows: REPAIR STATE CODE NAME = MARYLAND, REG STATE CODE NAME = NA, MILEAGE (mile) = 25285, 
-  #WAIS CODE NAME = STEERING- MISCELLANEOUS-MISC., PARTS NO. NAME = "CLIP, STEERING TELESCOPIC LEVER", 
-  #T1 CODE NAME = "UNSTABLE STEERING (VEHICLE WANDERS)", T2 CODE NAME = "BROKEN,SPLIT,TORN/DENT", 
-  #FUNCTION CODE NAME = "STEERING & OTHERS", F.DIST = 91041, COUNTRY/DIST CODE NAME = "USA", 
-  #DIST SETTLE. AMT - G.TOT (USD) = 84.29, DIST SETTLE. AMT - PARTS TOT (USD) = 9.83, TIRE MAKER = BS, 
+  #Row 2 is as follows: REPAIR STATE CODE NAME = MARYLAND (1.91%), REG STATE CODE NAME = NA (3.33%), 
+  #MILEAGE (mile) = 25285 (99.66%ile), 
+  #WAIS CODE NAME = STEERING- MISCELLANEOUS-MISC. (35%), PARTS NO. NAME = "CLIP, STEERING TELESCOPIC LEVER" (0.41%), 
+  #T1 CODE NAME = "UNSTABLE STEERING (VEHICLE WANDERS)" (26.4%), T2 CODE NAME = "BROKEN,SPLIT,TORN/DENT" (0.166%), 
+  #FUNCTION CODE NAME = "STEERING & OTHERS" (37%), F.DIST = 91041, COUNTRY/DIST CODE NAME = "USA", 
+  #DIST SETTLE. AMT - G.TOT (USD) = 84.29 (3%ile), DIST SETTLE. AMT - PARTS TOT (USD) = 9.83 (99.67%ile), TIRE MAKER = BS, 
   #PLANT CODE NAME = TMMK, ENG TYPE = 2GR-FE
+  
+  #For percentiles for numeric values, do 
+  #column <- "MILEAGE (mile)"; f <- ecdf(avalon_data[[column]]); f(25285)
   
   avalon_data[6, ]
   #Row 6 is as follows: REPAIR STATE CODE NAME = NORTH CAROLINA, REG STATE CODE NAME = NORTH CAROLINA, MILEAGE (mile) = 35050, 
@@ -113,11 +117,12 @@ analyze_outliers <- function()
   which(as.numeric(rank(pairwise_dist[17, ], ties.method = "random")) == 2)
   
   avalon_data[17, ]
-  #Row 17 is as follows: REPAIR STATE CODE NAME = TEXAS, REG STATE CODE NAME = TEXAS, MILEAGE (mile) = 13336, 
-  #WAIS CODE NAME = STEERING- MISCELLANEOUS-MISC., PARTS NO. NAME = "VEHICLE PULLING (PRELIMINARY CHECK AND ROAD TEST)_INSP", 
-  #T1 CODE NAME = "VEHICLE PULLS OR DRIFTS TO THE RIGHT", T2 CODE NAME = "OUT OF BALANCE", 
-  #FUNCTION CODE NAME = "STEERING & OTHERS", F.DIST = 91041, COUNTRY/DIST CODE NAME = "USA", 
-  #DIST SETTLE. AMT - G.TOT (USD) = 435.6, DIST SETTLE. AMT - PARTS TOT (USD) = 0, TIRE MAKER = MN, 
+  #Row 17 is as follows: REPAIR STATE CODE NAME = TEXAS (9.16%), REG STATE CODE NAME = TEXAS (8.66%), 
+  #MILEAGE (mile) = 13336 (94%ile), WAIS CODE NAME = STEERING- MISCELLANEOUS-MISC. (35%), 
+  #PARTS NO. NAME = "VEHICLE PULLING (PRELIMINARY CHECK AND ROAD TEST)_INSP (34.25%)", 
+  #T1 CODE NAME = "VEHICLE PULLS OR DRIFTS TO THE RIGHT (30.7%)", T2 CODE NAME = "OUT OF BALANCE" (8.75%), 
+  #FUNCTION CODE NAME = "STEERING & OTHERS" (37%), F.DIST = 91041, COUNTRY/DIST CODE NAME = "USA", 
+  #DIST SETTLE. AMT - G.TOT (USD) = 435.6 (95.67%), DIST SETTLE. AMT - PARTS TOT (USD) = 0, TIRE MAKER = MN, 
   #PLANT CODE NAME = TMMK, ENG TYPE = 2GR-FE
   
   avalon_data[1074, ]
@@ -128,5 +133,47 @@ analyze_outliers <- function()
   #DIST SETTLE. AMT - G.TOT (USD) = 403.3, DIST SETTLE. AMT - PARTS TOT (USD) = 0, TIRE MAKER = MN, 
   #PLANT CODE NAME = TMMK, ENG TYPE = 2GR-FE
 }
+
+#Check the modal values of the categorical variables and the distributions of the numeric ones
+general_patterns <- function()
+{
+  avalon_data <- load_avalon_data()
+  columns <- names(avalon_data)
+  n_rows <- nrow(avalon_data)
+  for (column in columns)
+  {
+    cat(paste("column = ", column, "\n", sep = ""))
+    if (is.factor(avalon_data[[column]]))
+    {
+      t <- sort(table(avalon_data[[column]]), decreasing = TRUE)
+      df <- data.frame(values = names(t), frequencies = as.numeric(t))
+      df$percentages <- df$frequencies/n_rows
+      print(df)
+    }
+    else
+    {
+      print(fivenum(avalon_data[[column]]))
+    }
+  }
+}
+
+general_patterns()
+#REPAIR STATE CODE NAME: TEXAS: 9.16%, CALIFORNIA: 9%, FLORIDA: 8.25%
+#REG STATE CODE NAME: CALIFORNIA: 9%, TEXAS: 8.66%, FLORIDA: 7.9%
+#MILEAGE (mile): 2  3872  5729 10002 35988
+#WAIS CODE NAME: FR WHEEL ALIGNMENT VEHICLE TENDS TO MOVE ONE SIDE: 40%, STEERING- MISCELLANEOUS-MISC.: 35%, 
+#                FR WHEEL ALIGNMENT OTHERS: 23%
+#PARTS NO. NAME: WHEEL ALIGNMENT_INSP: 63%, VEHICLE PULLING (PRELIMINARY CHECK AND ROAD TEST)_INSP: 34.25%,
+#                STEERING WHEEL OFF-CENTER (TIE RODS) _ADJST: 0.66%
+#T1 CODE NAME: VEHICLE PULLS OR DRIFTS TO THE RIGHT: 30.7%, VEHICLE PULLS OR DRIFTS TO THE LEFT: 27.9%
+#T2 CODE NAME: OTHERS: 39%, POOR FIT,POOR ASSEMBLING: 16.67%, IMPROPER FREE PLAY: 11.16%
+#FUNCTION CODE NAME: SUSPENTION & AXLE: 63%, STEERING & OTHERS: 37%
+#F.DIST: 91025 91041 91041 91041 91041
+#COUNTRY/DIST CODE NAME: USA: 98%, CANADA: 2%
+#DIST SETTLE. AMT - G.TOT (USD): 16.600  132.000  174.445  280.190 1172.600
+#DIST SETTLE. AMT - PARTS TOT (USD): 0.0   0.0   0.0   0.0 661.7
+#TIRE MAKER: BS: 54%, MN: 46%
+#ENG PLANT CODE NAME: TMMK: 95.5%, KAMIGO: 4.5%
+#ENG TYPE: 2GR-FE: 76%, 2AR-FXE: 24%
 
 
