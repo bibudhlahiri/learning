@@ -71,9 +71,21 @@ combine_columns_for_outliers <- function(index_column)
   outliers_by_knn <<- intersect(outliers_by_knn, index_column)
 }
 
-#pairwise_dist <- find_knn_outliers()
+score_outliers <- function()
+{
+  avalon_data <- load_avalon_data()
+  pairwise_dist <- as.matrix(daisy(avalon_data, "gower")) 
+  nearest_neighbors <- t(apply(t(pairwise_dist),2,sort))
+  max_k <- 20
+  matr_kNN_distances <- nearest_neighbors[, 2:(max_k + 1)]
+  outlier_scores <- apply(matr_kNN_distances, 1, sum)
+  sort(outlier_scores, decreasing = TRUE, index.return=TRUE)$x
+}
 
-analyze_outliers <- function()
+#pairwise_dist <- find_knn_outliers()
+outlier_scores <- score_outliers()
+
+analyze_outliers_from_first_algo <- function()
 {
   #Row 2 is an outlier as detected by this algorithm. 
   nearest_neighbors[2, 1:11]
@@ -131,6 +143,51 @@ analyze_outliers <- function()
   #T1 CODE NAME = "VEHICLE PULLS OR DRIFTS TO THE RIGHT", T2 CODE NAME = "POOR FIT,POOR ASSEMBLING", 
   #FUNCTION CODE NAME = "STEERING & OTHERS", F.DIST = 91041, COUNTRY/DIST CODE NAME = "USA", 
   #DIST SETTLE. AMT - G.TOT (USD) = 403.3, DIST SETTLE. AMT - PARTS TOT (USD) = 0, TIRE MAKER = MN, 
+  #PLANT CODE NAME = TMMK, ENG TYPE = 2GR-FE
+}
+
+analyze_outliers_from_second_algo <- function()
+{
+  #Row 3 is the highest ranking outlier (7.8131674), row 233 is the least ranking outlier (0.9214401)
+  nearest_neighbors[3, 1:11]
+  #Distances with its top 10 NNs are:
+  #0.2243712 0.3424989 0.3576650 0.3727146 0.3785817 0.3798806 0.3813296 0.3893747 0.3925636 0.3931376
+  
+  nearest_neighbors[233, 1:11]
+  #Distances with its top 10 NNs are:
+  #0.004638599 0.005306186 0.008323434 0.009057360 0.012327026 0.013262984 0.013734659 0.016904549 0.025643306 0.067540826
+  
+  fivenum(nearest_neighbors[, 2]) 
+  #5-num summary of distances to 1st NN for the general population is
+  #9.262861e-06 9.080478e-03 6.987182e-02 8.781732e-02 2.865031e-01. So the median is 0.0698 whereas 
+  #for row 2, it is 0.2243712 and for row 233, it is 0.004638599.
+  
+  fivenum(nearest_neighbors[, 3]) 
+  #5-num summary of distances to 2nd NN for the general population is
+  #0.0003575465 0.0681581676 0.0761668884 0.1362878953 0.3426311251. So the median is 0.0761 
+  #whereas for row 3, it is 0.3424989 and for row 233, it is 0.005306186.
+  
+  #Which row is the 1st NN to row 3?
+  which(as.numeric(rank(pairwise_dist[3, ], ties.method = "random")) == 2)
+  #The 261st element (rank 2) is the 1st NN with a distace of 0.2243712.
+  
+  avalon_data[3, ]
+  #Row 3 is as follows: REPAIR STATE CODE NAME = SOUTH DAKOTA (0.4%), REG STATE CODE NAME = SOUTH DAKOTA (0.5%), 
+  #MILEAGE (mile) = 31657 (99.83%ile), 
+  #WAIS CODE NAME = TIE ROD-OTHERS (0.33%), PARTS NO. NAME = "END SUB-ASSY, TIE ROD, LH" (0.08%), 
+  #T1 CODE NAME = "STEERING WHEEL OFF-CENTER" (14.9%), T2 CODE NAME = "FAULTY MACHINING,POOR FORMING" (0.33%), 
+  #FUNCTION CODE NAME = "STEERING & OTHERS" (37%), F.DIST = 91041, COUNTRY/DIST CODE NAME = "USA", 
+  #DIST SETTLE. AMT - G.TOT (USD) = 87 (3%ile), DIST SETTLE. AMT - PARTS TOT (USD) = 0, TIRE MAKER = MN, 
+  #PLANT CODE NAME = TMMK, ENG TYPE = 2GR-FE
+  
+  avalon_data[233, ]
+  #Row 233 is as follows: REPAIR STATE CODE NAME = TEXAS (9.16%), REG STATE CODE NAME = TEXAS (9%), 
+  #MILEAGE (mile) = 5164 (41st%ile), 
+  #WAIS CODE NAME = STEERING- MISCELLANEOUS-MISC. (35%), 
+  #PARTS NO. NAME = "VEHICLE PULLING (PRELIMINARY CHECK AND ROAD TEST)_INSP" (34.25%), 
+  #T1 CODE NAME = "UNSTABLE STEERING (VEHICLE WANDERS)" (26.41%), T2 CODE NAME = "OTHERS" (39%), 
+  #FUNCTION CODE NAME = "STEERING & OTHERS" (37%), F.DIST = 91041, COUNTRY/DIST CODE NAME = "USA", 
+  #DIST SETTLE. AMT - G.TOT (USD) = 324 (81.25%ile), DIST SETTLE. AMT - PARTS TOT (USD) = 0, TIRE MAKER = BS, 
   #PLANT CODE NAME = TMMK, ENG TYPE = 2GR-FE
 }
 
