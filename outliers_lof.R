@@ -64,8 +64,11 @@ find_lof_outliers <- function()
   print(fivenum(local_outlier_factors)) #0.8879776 1.0153629 1.0947816 1.2082687 2.5167702
   #rd_from_kNNs <- analyze_outliers(local_outlier_factors, k_distances, pairwise_dist, reachability_distances, 
   #                                             local_reachability_densities)
-  draw_plots(local_outlier_factors, local_reachability_densities)
-  local_outlier_factors
+  
+  rd_from_kNNs <- apply(pairwise_dist, 1, 
+                        function(x) get_rd_from_kNNs(x, k_distances, reachability_distances))
+  rd_from_kNNs <- t(rd_from_kNNs)
+  draw_plots(local_outlier_factors, local_reachability_densities, rd_from_kNNs)
 }
 
 find_k_neighborhood_size <- function(all_neighbors, k_distances)
@@ -131,12 +134,12 @@ analyze_outliers <- function(local_outlier_factors, k_distances, pairwise_dist, 
   
   rd_from_kNNs <- apply(pairwise_dist, 1, 
                         function(x) get_rd_from_kNNs(x, k_distances, reachability_distances))
-  rd_from_kNNs <- t(rd_from_kNNs)
-  print(dim(rd_from_kNNs))
+  rd_from_kNNs <- t(rd_from_kNNs) #Without transpose, was giving 10 x 1200 matrix instead of 1200 x 10
   rd_from_kNNs_for_outliers <- rd_from_kNNs[outlier_indices,]
       
   cat("fivenum for rd_from_kNNs_for_outliers is\n")
-  print(fivenum(rd_from_kNNs_for_outliers)) #0.1356421 0.2095692 0.2869193 0.3035375 0.3931376
+  print(fivenum(rd_from_kNNs_for_outliers)) #0.1356421 0.2095692 0.2869193 0.3035375 0.3931376: reachability distances from 
+  #k NNs for outliers is about twice that of the general population
   cat("fivenum for reachability_distances of general population from their k NNs is\n") #0.06754083 0.13523596 0.14073088 0.15538691 0.39313761
   print(fivenum(rd_from_kNNs))
   
@@ -193,7 +196,7 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
   }
 }
 
-draw_plots <- function(local_outlier_factors, local_reachability_densities)
+draw_plots <- function(local_outlier_factors, local_reachability_densities, rd_from_kNNs)
 {
   #Variation of outlier score with reachability density
   analysis_data <- data.frame("local_reachability_densities" = local_reachability_densities, "local_outlier_factors" = local_outlier_factors)
@@ -203,15 +206,20 @@ draw_plots <- function(local_outlier_factors, local_reachability_densities)
     
   #Distribution of outlier score
   p2 <- ggplot(analysis_data, aes(x = local_outlier_factors)) + geom_histogram(aes(y = ..density..)) + geom_density()
-  multiplot(p1, p2, cols=2)
+   
+  #How does reachability distance from the k-th NN vary with outlier score?
+  df <- data.frame(rd_from_kNNs)
+  df <- cbind(df, local_outlier_factors)
+  colnames <- paste("X", 1:10, sep = "")
+  df_long <- melt(df, id.vars = c("local_outlier_factors"), measure.vars = colnames, variable.name= "k_value", 
+                  value.name = "dist_with_kNN")
+  p3 <- ggplot(data = df_long, aes(x = dist_with_kNN, y = local_outlier_factors, group = k_value, colour = k_value)) + geom_line() + geom_point()
+  multiplot(p1, p2, p3, cols=2)
   aux <- dev.off()
 }
 
 #fivenum(pairwise_dist) 0.0000000 0.3393090 0.4186019 0.5001053 0.8609580 - Bimodal distribution
-local_outlier_factors <- find_lof_outliers()
-print(sort(local_outlier_factors, decreasing = TRUE, index.return=TRUE)$x[1:10]) 
-#Top 10 outliers are 930, 118, 311, 261, 1, 194, 2, 982, 548, 645. Of these, 118, 261, 982 and 548 have appeared among the 
-#top 10 outliers by the other algorithm. 
-#Row 3 was the top global outlier. Why is it not among the top 10 local outliers?
+find_lof_outliers()
+
 
 
