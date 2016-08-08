@@ -1,5 +1,6 @@
 library(data.table)
 library(cluster)
+library(ggplot2)
 
 elem_idx <- 1 
 row_idx <- 1
@@ -45,10 +46,6 @@ find_lof_outliers <- function()
   nearest_neighbors <- t(apply(t(pairwise_dist),2,sort))
   
   k_distances <- nearest_neighbors[, (k + 1)] #Holds the distance to the k-th NN for each data point
-  print(names(sort(k_distances, decreasing = TRUE))[1:15]) 
-  #Top 15 based on distance with 10th NN are 3, 92, 548, 835, 401, 5, 118, 930, 6, 261, 2, 977, 904, 982, 9: 
-  #many of them match with the top 10 outliers given by the kNN-based algorithm
-  
   reachability_distances <- matrix(mapply(function(x, j) max(k_distances[j], x), pairwise_dist, col(pairwise_dist)),
                                    nrow = nrow(pairwise_dist)) 
 
@@ -64,10 +61,11 @@ find_lof_outliers <- function()
                                  function(x) find_local_outlier_factor(x, k_distances, local_reachability_densities, 
                                                                        k_neighborhood_sizes))
   cat("Fivenum of local_outlier_factors is\n")
-  print(fivenum(local_outlier_factors))
+  print(fivenum(local_outlier_factors)) #0.8879776 1.0153629 1.0947816 1.2082687 2.5167702
+  #rd_from_kNNs <- analyze_outliers(local_outlier_factors, k_distances, pairwise_dist, reachability_distances, 
+  #                                             local_reachability_densities)
+  draw_plots(local_outlier_factors, local_reachability_densities)
   local_outlier_factors
-  rd_from_kNNs <- analyze_outliers(local_outlier_factors, k_distances, pairwise_dist, reachability_distances, 
-                                               local_reachability_densities)
 }
 
 find_k_neighborhood_size <- function(all_neighbors, k_distances)
@@ -136,10 +134,7 @@ analyze_outliers <- function(local_outlier_factors, k_distances, pairwise_dist, 
   rd_from_kNNs <- t(rd_from_kNNs)
   print(dim(rd_from_kNNs))
   rd_from_kNNs_for_outliers <- rd_from_kNNs[outlier_indices,]
-  
-  #rd_from_kNNs_for_outliers <- apply(pairwise_dist_for_outliers, 1, 
-  #                              function(x) get_rd_from_kNNs_for_outliers(x, outlier_indices, k_distances_for_outliers, reachability_distances_for_outliers))
-    
+      
   cat("fivenum for rd_from_kNNs_for_outliers is\n")
   print(fivenum(rd_from_kNNs_for_outliers)) #0.1356421 0.2095692 0.2869193 0.3035375 0.3931376
   cat("fivenum for reachability_distances of general population from their k NNs is\n") #0.06754083 0.13523596 0.14073088 0.15538691 0.39313761
@@ -159,12 +154,61 @@ get_rd_from_kNNs <- function(neighbors, k_distances, reachability_distances)
   kNN_indices <- kNN_indices[kNN_indices != curr_idx_general_pop]
   ret_vector <- reachability_distances[curr_idx_general_pop, kNN_indices]
   curr_idx_general_pop <<- curr_idx_general_pop + 1
-  cat(paste("curr_idx_general_pop = ", curr_idx_general_pop, ", length(ret_vector) = ", length(ret_vector), "\n"))
   ret_vector
 }
 
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+draw_plots <- function(local_outlier_factors, local_reachability_densities)
+{
+  #Variation of outlier score with reachability density
+  analysis_data <- data.frame("local_reachability_densities" = local_reachability_densities, "local_outlier_factors" = local_outlier_factors)
+  image_file <- "C:\\Users\\blahiri\\learning\\figures\\all_plots.png"
+  png(image_file, width = 800, height = 800)
+  p1 <- ggplot(analysis_data, aes(x = local_reachability_densities, y = local_outlier_factors, group = 1)) + geom_line(colour="red") + geom_smooth(method=lm)
+    
+  #Distribution of outlier score
+  p2 <- ggplot(analysis_data, aes(x = local_outlier_factors)) + geom_histogram(aes(y = ..density..)) + geom_density()
+  multiplot(p1, p2, cols=2)
+  aux <- dev.off()
+}
+
 #fivenum(pairwise_dist) 0.0000000 0.3393090 0.4186019 0.5001053 0.8609580 - Bimodal distribution
-rd_from_kNNs <- find_lof_outliers()
+local_outlier_factors <- find_lof_outliers()
 print(sort(local_outlier_factors, decreasing = TRUE, index.return=TRUE)$x[1:10]) 
 #Top 10 outliers are 930, 118, 311, 261, 1, 194, 2, 982, 548, 645. Of these, 118, 261, 982 and 548 have appeared among the 
 #top 10 outliers by the other algorithm. 
