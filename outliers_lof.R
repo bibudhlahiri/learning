@@ -5,6 +5,7 @@ elem_idx <- 1
 row_idx <- 1
 curr_row <- 1
 curr_idx_among_outliers <- 1
+curr_idx_general_pop <- 1
 
 load_avalon_data <- function()
 {
@@ -44,7 +45,9 @@ find_lof_outliers <- function()
   nearest_neighbors <- t(apply(t(pairwise_dist),2,sort))
   
   k_distances <- nearest_neighbors[, (k + 1)] #Holds the distance to the k-th NN for each data point
-  print(names(sort(k_distances, decreasing = TRUE))[1:15]) #"3"   "92"  "548" "835" "401" "5"   "118" "930" "6"   "261" "2"   "977" "904" "982" "9"
+  print(names(sort(k_distances, decreasing = TRUE))[1:15]) 
+  #Top 15 based on distance with 10th NN are 3, 92, 548, 835, 401, 5, 118, 930, 6, 261, 2, 977, 904, 982, 9: 
+  #many of them match with the top 10 outliers given by the kNN-based algorithm
   
   reachability_distances <- matrix(mapply(function(x, j) max(k_distances[j], x), pairwise_dist, col(pairwise_dist)),
                                    nrow = nrow(pairwise_dist)) 
@@ -62,7 +65,9 @@ find_lof_outliers <- function()
                                                                        k_neighborhood_sizes))
   cat("Fivenum of local_outlier_factors is\n")
   print(fivenum(local_outlier_factors))
-  rd_from_kNNs_for_outliers <- analyze_outliers(local_outlier_factors, k_distances, pairwise_dist, reachability_distances)
+  local_outlier_factors
+  rd_from_kNNs <- analyze_outliers(local_outlier_factors, k_distances, pairwise_dist, reachability_distances, 
+                                               local_reachability_densities)
 }
 
 find_k_neighborhood_size <- function(all_neighbors, k_distances)
@@ -105,48 +110,64 @@ find_local_outlier_factor <- function(all_neighbors, k_distances, local_reachabi
 #nearest neighbors compared to normal points. Confirm that the reachability distance values are high because 
 #the outliers are far away from their neighbors (rd_k(A,B) = max(k_distance(B), d(A, B))) and check 
 #what makes the outliers far from their k nearest neighbors.
-analyze_outliers <- function(local_outlier_factors, k_distances, pairwise_dist, reachability_distances)
+analyze_outliers <- function(local_outlier_factors, k_distances, pairwise_dist, reachability_distances, 
+                             local_reachability_densities)
 {
-  lof_threshold <- 1.8
+  lof_threshold <- 1.87
   outlier_indices <- as.numeric(which(local_outlier_factors > lof_threshold))
   
   cat("outlier_indices\n")
-  print(outlier_indices) #With lof_threshold = 1.8, outlier_indices: 1   2   9  28 118 194 261 311 548 594 645 835 930 977 982
+  print(outlier_indices) #With lof_threshold = 1.87, outlier_indices: 1, 2, 28, 118, 194, 261, 311, 548, 645, 835, 930, 982
    
   #Get the distance to the k-th NN for all outliers
   k_distances_for_outliers <- k_distances[outlier_indices]
   
-  print(fivenum(k_distances))
-  print(fivenum(k_distances_for_outliers))
+  print(fivenum(k_distances)) #0.06754083 0.13570965 0.14203925 0.20070854 0.39313761
+  print(fivenum(k_distances_for_outliers)) #0.2051604 0.2162725 0.2945539 0.3137104 0.3570943: Look at Q1, median and Q3.
+  #These distance values for the outliers are higher than the corresponding distance values for the general population. 
+  #These are distances to the 10th NN.
   
   #Get the indices of the k-th NNs for all outliers from pairwise_dist matrix
   pairwise_dist_for_outliers <- pairwise_dist[outlier_indices,]
   reachability_distances_for_outliers <- reachability_distances[outlier_indices,]
   
-  rd_from_kNNs_for_outliers <- apply(pairwise_dist_for_outliers, 1, 
-                                function(x) get_rd_from_kNNs_for_outliers(x, outlier_indices, k_distances_for_outliers, reachability_distances_for_outliers))
+  rd_from_kNNs <- apply(pairwise_dist, 1, 
+                        function(x) get_rd_from_kNNs(x, k_distances, reachability_distances))
+  rd_from_kNNs <- t(rd_from_kNNs)
+  print(dim(rd_from_kNNs))
+  rd_from_kNNs_for_outliers <- rd_from_kNNs[outlier_indices,]
+  
+  #rd_from_kNNs_for_outliers <- apply(pairwise_dist_for_outliers, 1, 
+  #                              function(x) get_rd_from_kNNs_for_outliers(x, outlier_indices, k_distances_for_outliers, reachability_distances_for_outliers))
     
   cat("fivenum for rd_from_kNNs_for_outliers is\n")
-  print(fivenum(rd_from_kNNs_for_outliers))
-  cat("fivenum for general reachability_distances is\n")
-  print(fivenum(reachability_distances))
-  rd_from_kNNs_for_outliers
+  print(fivenum(rd_from_kNNs_for_outliers)) #0.1356421 0.2095692 0.2869193 0.3035375 0.3931376
+  cat("fivenum for reachability_distances of general population from their k NNs is\n") #0.06754083 0.13523596 0.14073088 0.15538691 0.39313761
+  print(fivenum(rd_from_kNNs))
+  
+  cat("fivenum for local_reachability_densities is\n")
+  print(fivenum(local_reachability_densities)) #2.704293  6.024992  7.004358  7.991096 14.218325
+  cat("fivenum for local_reachability_densities of outliers is\n")
+  print(fivenum(local_reachability_densities[outlier_indices])) #2.902675 3.233046 3.507296 5.051305 5.281766: The local
+  #reachability densities for outliers are on average much lower (about half) of the general population.
+  rd_from_kNNs
 }
 
-#For a given outlier, gets its reachability distance values from its k NNs. So returns k numbers for an outlier.
-get_rd_from_kNNs_for_outliers <- function(outliers_neighbors, outlier_indices, k_distances_for_outliers, reachability_distances_for_outliers)
+get_rd_from_kNNs <- function(neighbors, k_distances, reachability_distances)
 {
-  kNN_indices <- which(outliers_neighbors <= k_distances_for_outliers[curr_idx_among_outliers])
-  
-  #The original index of the given outlier should be removed from kNN_indices. As we need the original index, we need to 
-  #pull it from outlier_indices.
-  kNN_indices <- kNN_indices[kNN_indices != outlier_indices[curr_idx_among_outliers]]
-  kNN_indices <- as.numeric(kNN_indices)  
-  
-  ret_vector <- reachability_distances_for_outliers[curr_idx_among_outliers, kNN_indices]
-  curr_idx_among_outliers <<- curr_idx_among_outliers + 1
+  kNN_indices <- as.numeric(which(neighbors <= k_distances[curr_idx_general_pop]))
+  kNN_indices <- kNN_indices[kNN_indices != curr_idx_general_pop]
+  ret_vector <- reachability_distances[curr_idx_general_pop, kNN_indices]
+  curr_idx_general_pop <<- curr_idx_general_pop + 1
+  cat(paste("curr_idx_general_pop = ", curr_idx_general_pop, ", length(ret_vector) = ", length(ret_vector), "\n"))
   ret_vector
 }
 
 #fivenum(pairwise_dist) 0.0000000 0.3393090 0.4186019 0.5001053 0.8609580 - Bimodal distribution
-rd_from_kNNs_for_outliers <- load_avalon_data()
+rd_from_kNNs <- find_lof_outliers()
+print(sort(local_outlier_factors, decreasing = TRUE, index.return=TRUE)$x[1:10]) 
+#Top 10 outliers are 930, 118, 311, 261, 1, 194, 2, 982, 548, 645. Of these, 118, 261, 982 and 548 have appeared among the 
+#top 10 outliers by the other algorithm. 
+#Row 3 was the top global outlier. Why is it not among the top 10 local outliers?
+
+
