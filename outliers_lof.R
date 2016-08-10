@@ -65,10 +65,12 @@ find_lof_outliers <- function()
   #rd_from_kNNs <- analyze_outliers(local_outlier_factors, k_distances, pairwise_dist, reachability_distances, 
   #                                             local_reachability_densities)
   
-  rd_from_kNNs <- apply(pairwise_dist, 1, 
-                        function(x) get_rd_from_kNNs(x, k_distances, reachability_distances))
-  rd_from_kNNs <- t(rd_from_kNNs)
-  draw_plots(local_outlier_factors, local_reachability_densities, rd_from_kNNs)
+  #rd_from_kNNs <- apply(pairwise_dist, 1, 
+  #                      function(x) get_rd_from_kNNs(x, k_distances, reachability_distances))
+  #rd_from_kNNs <- t(rd_from_kNNs)
+  #draw_plots_1(local_outlier_factors, local_reachability_densities)
+  #draw_plots_2(local_outlier_factors, rd_from_kNNs)
+  high_value_high_score_claims <- business_value(avalon_data, local_outlier_factors)
 }
 
 find_k_neighborhood_size <- function(all_neighbors, k_distances)
@@ -196,30 +198,54 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
   }
 }
 
-draw_plots <- function(local_outlier_factors, local_reachability_densities, rd_from_kNNs)
+draw_plots_1 <- function(local_outlier_factors, local_reachability_densities)
 {
   #Variation of outlier score with reachability density
   analysis_data <- data.frame("local_reachability_densities" = local_reachability_densities, "local_outlier_factors" = local_outlier_factors)
   image_file <- "C:\\Users\\blahiri\\learning\\figures\\all_plots.png"
-  png(image_file, width = 800, height = 800)
+  png(image_file, width = 800, height = 400)
   p1 <- ggplot(analysis_data, aes(x = local_reachability_densities, y = local_outlier_factors, group = 1)) + geom_line(colour="red") + geom_smooth(method=lm)
     
   #Distribution of outlier score
   p2 <- ggplot(analysis_data, aes(x = local_outlier_factors)) + geom_histogram(aes(y = ..density..)) + geom_density()
-   
-  #How does reachability distance from the k-th NN vary with outlier score?
-  df <- data.frame(rd_from_kNNs)
-  df <- cbind(df, local_outlier_factors)
-  colnames <- paste("X", 1:10, sep = "")
-  df_long <- melt(df, id.vars = c("local_outlier_factors"), measure.vars = colnames, variable.name= "k_value", 
-                  value.name = "dist_with_kNN")
-  p3 <- ggplot(data = df_long, aes(x = dist_with_kNN, y = local_outlier_factors, group = k_value, colour = k_value)) + geom_line() + geom_point()
-  multiplot(p1, p2, p3, cols=2)
+  multiplot(p1, p2, cols=2)
   aux <- dev.off()
 }
 
+draw_plots_2 <- function(local_outlier_factors, rd_from_kNNs)
+{
+  #How does reachability distance from the k-th NN vary with outlier score?
+  image_file <- "C:\\Users\\blahiri\\learning\\figures\\rd_from_kNNs.png"
+  df <- data.frame(rd_from_kNNs)
+  df <- cbind(df, local_outlier_factors)
+  df <- df[, c("X3", "X6", "X10", "local_outlier_factors")]
+  colnames <- paste("X", c(3, 6, 10), sep = "")
+  df_long <- melt(df, id.vars = c("local_outlier_factors"), measure.vars = colnames, variable.name= "k_value", 
+                value.name = "dist_with_kNN")
+  png(image_file, width = 800, height = 400)
+  p3 <- ggplot(data = df_long, aes(x = local_outlier_factors, y = dist_with_kNN, group = k_value, colour = k_value)) + geom_line()
+  print(p3)
+  aux <- dev.off()
+}
+
+#Is there a correlation between claim amount and outlier score?
+business_value <- function(avalon_data, local_outlier_factors)
+{
+  #Check the outlier score of the high-value claims and see where they lie in the range of outlier scores
+  #Q3 of DIST SETTLE. AMT - G.TOT (USD) = 280.19
+  setnames(avalon_data, "DIST SETTLE. AMT - G.TOT (USD)", "settlement_amt")
+  avalon_data[, outlier_score := local_outlier_factors]
+  print(cor(avalon_data[, settlement_amt], avalon_data[, outlier_score])) #-0.008234451
+  high_value_claims <- avalon_data[(settlement_amt > 300),]
+  print(fivenum(high_value_claims[, outlier_score])) #0.9214772 1.0108932 1.1041406 1.1864908 2.5167702: Not significantly 
+  #different from outlier score distribution of general population
+  #Claims which are of high value as well as high outlier score
+  high_value_high_score_claims <- avalon_data[((settlement_amt > 300) & (outlier_score > 1.5)),] #7 claims: the one with 
+  #the overall highest outlier score, 2.516770, has a claim amount of $808.90!
+}
+
 #fivenum(pairwise_dist) 0.0000000 0.3393090 0.4186019 0.5001053 0.8609580 - Bimodal distribution
-find_lof_outliers()
+high_value_high_score_claims <- find_lof_outliers()
 
 
 
