@@ -24,7 +24,11 @@ gen_driving_data <- function()
   non_risky[, risky := sample(c("true", "false"), n_non_risky, replace = TRUE, prob = c(0.1, 0.9))]
   
   driving_data <- rbindlist(list(risky, non_risky))
-  print(head(driving_data))
+  id_start <- 217654
+  driving_data[, id := sample(id_start:(id_start+N-1), replace = FALSE)]
+  #print(head(driving_data))
+  filename <- "C:\\Users\\blahiri\\AllState\\driving_data.csv"
+  write.table(driving_data, filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
   driving_data
 }
 
@@ -43,11 +47,12 @@ classify_driving_data_dtree <- function()
   print(table(training_data$risky)) 
   print(table(test_data$risky))
   
-  #cols <- c("session_id", "flow_id")            
+  #If there are more ID-type fields that are not used in modelling, they should be added here
+  cols <- c("id")            
   
   bestmod <- rpart(risky ~ ., 
-                   data = training_data,
-                   #data = training_data[, .SD, .SDcols = -cols]
+                   #data = training_data,
+                   data = training_data[, .SD, .SDcols = -cols]
                    #control = rpart.control(maxdepth = 10)
                    )
   test_data[, predicted_risky := as.character(predict(bestmod, newdata = test_data, type = "class"))]
@@ -64,6 +69,9 @@ classify_driving_data_dtree <- function()
   
   print(bestmod)
   print(bestmod$variable.importance/sum(bestmod$variable.importance))
+  bestmod
 }
 
-classify_driving_data_dtree()
+#gen_driving_data()
+bestmod <- classify_driving_data_dtree()
+
