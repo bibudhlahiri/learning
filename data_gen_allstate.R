@@ -10,8 +10,9 @@ gen_driving_data <- function()
   n_risky <- 0.5*N
   risky <- data.table(time_of_day = sample(c("night", "day"), n_risky, replace = TRUE, prob = c(0.95, 0.05)))
   risky[, raining := sample(c("true", "false"), n_risky, replace = TRUE, prob = c(0.95, 0.05))]
-  risky[, accident_prone_area := sample(c("true", "false"), n_risky, replace = TRUE, prob = c(0.95, 0.05))]
+  risky[, accident_prone_area := sample(c("true", "false"), n_risky, replace = TRUE, prob = c(0.7, 0.3))]
   risky[, g_force := c(rnorm(n_risky/2, 0.185, 0.1), rnorm(n_risky/2, -0.185, 0.1))]
+  risky[, n_prev_instances := rbinom(n_risky, 4, 0.6)]
   risky[, risky := sample(c("true", "false"), n_risky, replace = TRUE, prob = c(0.9, 0.1))]
   
   n_non_risky <- N - n_risky
@@ -19,6 +20,7 @@ gen_driving_data <- function()
   non_risky[, raining := sample(c("true", "false"), n_non_risky, replace = TRUE, prob = c(0.5, 0.5))]
   non_risky[, accident_prone_area := sample(c("true", "false"), n_non_risky, replace = TRUE, prob = c(0.5, 0.5))]
   non_risky[, g_force := c(rnorm(n_non_risky/2, 0.08, 0.04), rnorm(n_non_risky/2, -0.08, 0.04))]
+  non_risky[, n_prev_instances := rbinom(n_non_risky, 2, 0.6)]
   non_risky[, risky := sample(c("true", "false"), n_non_risky, replace = TRUE, prob = c(0.1, 0.9))]
   
   driving_data <- rbindlist(list(risky, non_risky))
@@ -46,7 +48,7 @@ classify_driving_data_dtree <- function()
   bestmod <- rpart(risky ~ ., 
                    data = training_data,
                    #data = training_data[, .SD, .SDcols = -cols]
-                   control = rpart.control(maxdepth = 10)
+                   #control = rpart.control(maxdepth = 10)
                    )
   test_data[, predicted_risky := as.character(predict(bestmod, newdata = test_data, type = "class"))]
   
