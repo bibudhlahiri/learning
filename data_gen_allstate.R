@@ -36,6 +36,24 @@ add_junk_fields <- function(driving_data, N)
   driving_data[, start_address_street := address_data[['Provider Street Address']][sampled_addresses]]
   sampled_addresses <- sample(1:nrow(address_data), N, replace = FALSE)
   driving_data[, end_address_street := address_data[['Provider Street Address']][sampled_addresses]]
+  
+  driving_data[, fuel_cost_usd := runif(N, 1.0, 5.0)]
+  driving_data[, fuel_volume_l := runif(N, 1.0, 5.0)]
+  driving_data[, average_kmpl := runif(N, 6, 14)]
+  driving_data[, average_from_epa_kmpl := runif(N, 7.7, 15.7)]
+  driving_data[, score_events := runif(N, 30, 70)]
+  driving_data[, score_speeding := round(runif(N, 30, 70))]
+  driving_data[, hard_brakes := sample(c(0, 1, 2), N, replace = TRUE, prob = c(0.9, 0.05, 0.05))]
+  driving_data[, hard_accels := sample(c(0, 1, 2), N, replace = TRUE, prob = c(0.9, 0.05, 0.05))]
+  driving_data[, duration_over_70_s := sample(c(0, 1, 2), N, replace = TRUE, prob = c(0.9, 0.05, 0.05))]
+  driving_data[, duration_over_75_s := sample(c(0, 1, 2), N, replace = TRUE, prob = c(0.9, 0.05, 0.05))]
+  driving_data[, duration_over_80_s := sample(c(0, 1, 2), N, replace = TRUE, prob = c(0.9, 0.05, 0.05))]
+  driving_data[, start_timezone := "America/Los Angeles"]
+  driving_data[, end_timezone := "America/Los Angeles"]
+  driving_data[, city_fraction := 1]
+  driving_data[, highway_fraction := 0]
+  driving_data[, idling_time_s := round(runif(N, 10, 70))]
+  driving_data[, tags := sample(c("business", "personal"), N, replace = TRUE, prob = c(0.5, 0.5))]
   driving_data
 }
 
@@ -96,7 +114,10 @@ classify_driving_data_dtree <- function()
             "started_at", "ended_at", "start_address_street", "end_address_street", 
             "start_address_city", "end_address_city",
             "start_address_state", "end_address_state",
-            "start_address_zip", "end_address_zip")            
+            "start_address_zip", "end_address_zip", "fuel_cost_usd", "fuel_volume_l", "average_kmpl", 
+            "average_from_epa_kmpl", "score_events", "score_speeding", "hard_brakes", "hard_accels",
+            "duration_over_70_s", "duration_over_75_s", "duration_over_80_s", "start_timezone",
+            "end_timezone", "city_fraction", "highway_fraction", "idling_time_s", "tags")
   
   bestmod <- rpart(risky ~ ., 
                    #data = training_data,
