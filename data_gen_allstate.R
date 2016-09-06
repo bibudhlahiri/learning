@@ -3,6 +3,42 @@ library(e1071)
 library(rpart)
 set.seed(1)
 
+add_junk_fields <- function(driving_data, N)
+{
+  #Add fields that are not needed for modelling
+  event_id_start <- 217654
+  driving_data[, event_id := sample(event_id_start:(event_id_start+N-1), N, replace = FALSE)]
+  driver_id_start <- 182542
+  driving_data[, driver_id := sample(driver_id_start:(driver_id_start+N-1), N, replace = FALSE)]
+  driving_data[, start_latitude := runif(N, 33.95235, 34.08308)]
+  driving_data[, start_longitude := runif(N, -118.38511, -118.3659)]
+  driving_data[, end_latitude := runif(N, 34.08308, 34.2134)]
+  driving_data[, end_longitude := runif(N, -118.3659, -118.3472)]
+  
+  beginning_of_time <- as.POSIXlt("2015-01-01 00:00:00")
+  driving_data[, started_at := beginning_of_time + runif(N, 0, 600*24*3600)]
+  driving_data[, ended_at := started_at + runif(N, 0, 2*3600)]
+  
+  
+  driving_data[, start_address_city := "Los Angeles"]
+  driving_data[, end_address_city := "Los Angeles"]
+  driving_data[, start_address_state := "CA"]
+  driving_data[, end_address_state := "CA"]
+  driving_data[, start_address_zip := sample(c(90001:93591), N, replace = TRUE)]
+  driving_data[, end_address_zip := start_address_zip + round(runif(N, 0, 3))]
+
+  filename <- "C:\\Users\\blahiri\\healthcare\\data\\cloudera_challenge\\Medicare_Provider_Charge_Inpatient_DRG100_FY2011.csv"
+  address_data <- fread(filename, header = TRUE, sep = ",", stringsAsFactors = FALSE, showProgress = TRUE, 
+                      colClasses = c("character", "numeric", "character", "character", "character",
+                                     "character", "numeric", "character", "numeric", "numeric", "numeric", "numeric"),
+                      data.table = TRUE)
+  sampled_addresses <- sample(1:nrow(address_data), N, replace = FALSE)
+  driving_data[, start_address_street := address_data[['Provider Street Address']][sampled_addresses]]
+  sampled_addresses <- sample(1:nrow(address_data), N, replace = FALSE)
+  driving_data[, end_address_street := address_data[['Provider Street Address']][sampled_addresses]]
+  driving_data
+}
+
 gen_driving_data <- function()
 {
   N <- 100000
@@ -32,13 +68,13 @@ gen_driving_data <- function()
   low_risk[, risky := sample(c("high", "medium", "low"), n_low_risk, replace = TRUE, prob = c(0.05, 0.05, 0.9))]
   
   driving_data <- rbindlist(list(high_risk, medium_risk, low_risk))
-  id_start <- 217654
-  driving_data[, id := sample(id_start:(id_start+N-1), replace = FALSE)]
-  
+  driving_data <- add_junk_fields(driving_data, N)
   filename <- "C:\\Users\\blahiri\\AllState\\driving_data.csv"
   write.table(driving_data, filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
   driving_data
 }
+
+
 
 classify_driving_data_dtree <- function()
 {
@@ -56,7 +92,11 @@ classify_driving_data_dtree <- function()
   print(table(test_data$risky))
   
   #If there are more ID-type fields that are not used in modelling, they should be added here
-  cols <- c("id")            
+  cols <- c("event_id", "driver_id", "start_latitude", "start_longitude", "end_latitude", "end_longitude", 
+            "started_at", "ended_at", "start_address_street", "end_address_street", 
+            "start_address_city", "end_address_city",
+            "start_address_state", "end_address_state",
+            "start_address_zip", "end_address_zip")            
   
   bestmod <- rpart(risky ~ ., 
                    #data = training_data,
