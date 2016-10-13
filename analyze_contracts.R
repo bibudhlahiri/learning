@@ -29,7 +29,7 @@ load_comet_data <- function()
   is_column_name <- unlist(lapply(from_schema_file, check_if_column_name))
   column_names <- from_schema_file[which(is_column_name == TRUE)]
   setnames(comet_data, names(comet_data), column_names)
-  sample_size <- 5000
+  sample_size <- 20000
   sampled_comet_data <- comet_data[sample(nrow(comet_data), sample_size), ]
   sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\SAMPLED_COMET_DATA_2016.TXT"
   write.table(sampled_comet_data, sample_filename, sep = "|", row.names = FALSE, col.names = TRUE, quote = FALSE)
@@ -158,11 +158,35 @@ reduce_number_of_distinct_values <- function(for_today)
   for_today
 }
 
+#Create a forest of decision trees with sampled feature sets.
+el_yunque <- function(comet_data, F = 5, T = 50)
+{
+  for_today <- prepare_for_contract_renewal(comet_data)
+  for_today <- reduce_number_of_distinct_values(for_today)
+  
+  for (i in 1:T)
+  {
+    features <- names(for_today)
+	features <- features[features != "renewed"]
+	sampled_features <- features[sample(length(features), F)]
+	formula_str <- paste("renewed ~ ", paste(sampled_features, collapse = " + "), sep = "")
+    dtree <- rpart(as.formula(formula_str), data = for_today)
+	if (!is.null(dtree$splits))
+	{
+	  #No point in printing decision trees with root node only
+	  cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
+	  print(dtree)
+	}
+  }
+  dtree
+}
+
 #comet_data <- load_comet_data()
 comet_data <- load_comet_sample()
 #for_today <- prepare_for_contract_renewal(comet_data)
 #reduce_number_of_distinct_values(for_today)
-dtree <- analyze_contract_renewal(comet_data)
+#dtree <- analyze_contract_renewal(comet_data)
+dtree <- el_yunque(comet_data)
 
 
 
