@@ -29,7 +29,35 @@ load_comet_data <- function()
   is_column_name <- unlist(lapply(from_schema_file, check_if_column_name))
   column_names <- from_schema_file[which(is_column_name == TRUE)]
   setnames(comet_data, names(comet_data), column_names)
+  sample_size <- 5000
+  sampled_comet_data <- comet_data[sample(nrow(comet_data), sample_size), ]
+  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\SAMPLED_COMET_DATA_2016.TXT"
+  write.table(sampled_comet_data, sample_filename, sep = "|", row.names = FALSE, col.names = TRUE, quote = FALSE)
   comet_data
+}
+
+load_comet_sample <- function()
+{
+  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\SAMPLED_COMET_DATA_2016.TXT"
+  sampled_comet_data <- fread(sample_filename, header = TRUE, sep = "|", stringsAsFactors = FALSE, showProgress = TRUE, 
+                    colClasses = c("character", "character", "character", "numeric", "character",
+					               "Date", "Date", "character", "numeric", "Date", 
+								   "numeric", "numeric", "numeric", "numeric", "numeric",
+								   "numeric", "numeric", "numeric", "Date", "Date",
+								   "Date", "numeric", "Date", "numeric", "character",
+								   "numeric", "numeric", "numeric", "numeric", "numeric",
+								   "numeric", "numeric", "numeric", "numeric", "numeric",
+								   "numeric", "numeric", "numeric", "numeric", "numeric",
+								   "numeric", "numeric", "numeric", "numeric", "numeric",
+								   "character", "character", "character", "character", "Date",
+								   "character", "character", "character", "character", "character",
+								   "numeric", "character", "numeric", "numeric", "numeric",
+								   "character", "numeric", "character", "character", "numeric",
+					               "Date", "numeric", "numeric", "character", "character",
+								   "character", "Date", "numeric", "numeric", "numeric",
+								   "numeric", "numeric", "numeric", "numeric", "numeric",
+								   "character", "character", "character", "character"),
+                    data.table = TRUE)
 }
 
 check_if_column_name <- function(input)
@@ -48,6 +76,7 @@ prepare_for_contract_renewal <- function(comet_data)
   comet_data[, TRACKER_DT := gsub("/", "-", comet_data$TRACKER_DT)]
   setkey(comet_data, TRACKER_DT)
   for_today <- comet_data[((TRACKER_DT >= as.character(minus_90_date)) & (TRACKER_DT <= as.character(plus_90_date))),]
+  cat(paste("nrow(for_today) = ", nrow(for_today), "\n", sep = ""))
   
   #Before dropping dates, generate corresponding factor variables
   for_today[, renewed := (RENEW_DATE != "")]
@@ -123,16 +152,17 @@ reduce_number_of_distinct_values <- function(for_today)
 	    #print(top_names)
 		set(for_today, j = column, value = ifelse(for_today[[column]] %in% top_names, as.character(for_today[[column]]), "Other"))
 	    #print(table(for_today[, get(column)]))
-		#for_today[, column := as.factor(for_today[, get(column)])]
 	  }
 	}
   }
   for_today
 }
 
-comet_data <- load_comet_data()
+#comet_data <- load_comet_data()
+comet_data <- load_comet_sample()
 #for_today <- prepare_for_contract_renewal(comet_data)
 #reduce_number_of_distinct_values(for_today)
 dtree <- analyze_contract_renewal(comet_data)
+
 
 
