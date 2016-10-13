@@ -41,7 +41,7 @@ check_if_column_name <- function(input)
   return(TRUE)
 } 
 
-analyze_contract_renewal <- function(comet_data)
+prepare_for_contract_renewal <- function(comet_data)
 {
   minus_90_date <- Sys.Date() - 90
   plus_90_date <- Sys.Date() + 90
@@ -65,13 +65,66 @@ analyze_contract_renewal <- function(comet_data)
   for_today[,(cols) := lapply(.SD, as.factor), .SDcols = cols]
   for_today[ ,c("ACCTSK", "TRACKER_DT", "TRACKER_EXEC_DT", "RENEW_DATE", "AIO_OFFER_DT", 
                 "CRM_OFFER_DT", "VIDEO_DISCONNECT_DT", "DATA_DISCONNECT_DT", "NEW_CONTRACT_END_DATE", 
-				"ACCT_STRT_DT", "ACCT_DISCONNECT_DT") := NULL]
+				"ACCT_STRT_DT", "ACCT_DISCONNECT_DT", "CLLI8") := NULL]
+  for_today
+}
+
+analyze_contract_renewal <- function(comet_data)
+{
+  for_today <- prepare_for_contract_renewal(comet_data)
   #W/o any optimization, the decision tree on all 1,136,189 rows splits only based on AIO_OFFER_NAME. One group has 
   #93.6% FALSE and 6.35% TRUE, and the other node has 96.6% TRUE and 3.3% FALSE. Together, these two nodes have 
   #999318 + 136871 = 1,136,189 points. But one reason for this may be decision tree favors categorical variables with too many (274)
   #distinct values: can we reduce the number of distinct values by grouping values together?
   dtree <- rpart(renewed ~ ., data = for_today)
 }
+
+analyze_factor_variables <- function(comet_data)
+{
+  for_today <- prepare_for_contract_renewal(comet_data)
+  columns <- names(for_today)
+  for (column in columns)
+  {
+    if (is.factor(for_today[, get(column)]))
+	{
+	  #CLLI8 has 7086 unique values, AIO_OFFER_NAME has 203, PromoOfferMix_Before has 35, PromoOfferMix has 34, ACCT_SERVICE_TYPE has 15,
+	  #BUNDLE_NAME has 30, NEW_BUNDLE_NAME has 30.
+	  cat(paste("column = ", column, ", no. of unique values = ", length(unique(for_today[, get(column)])), "\n", sep = ""))
+	}
+  }
+}
+
+#Since decision tree favors categorical variables with too many distinct values, reduce the number of 
+#distinct values of such variables by merging the categories after top (k-1).
+reduce_number_of_distinct_values <- function(for_today)
+{
+  k <- 5
+  columns <- names(for_today)
+  for (column in columns)
+  {
+    if (is.factor(for_today[, get(column)]))
+	{
+	  tx <- table(for_today[, get(column)])
+      names_in_order <- names(tx[order(-tx)])
+	  if (length(names_in_order) > k)
+	  {
+	    cat(paste("column = ", column, "\n", sep = ""))
+		print(tx[order(-tx)])
+        top_names <- names_in_order[1:(k - 1)]	 
+        if ("" %in% top_names)
+        {
+         top_names <- names_in_order[1:k]
+		 top_names <- top_names[top_names != ""]
+        }
+	    print(top_names)
+	    for_today[, (column) := ifelse(get(column) %in% top_names, get(column), "Other")]
+	    print(table(for_today[, get(column)]))
+	  }
+	}
+  }
+}
+
+
 
 
 
