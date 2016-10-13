@@ -76,6 +76,10 @@ analyze_contract_renewal <- function(comet_data)
   #93.6% FALSE and 6.35% TRUE, and the other node has 96.6% TRUE and 3.3% FALSE. Together, these two nodes have 
   #999318 + 136871 = 1,136,189 points. But one reason for this may be decision tree favors categorical variables with too many (274)
   #distinct values: can we reduce the number of distinct values by grouping values together?
+  
+  #With the reduction in the number of distinct values for the categorical features, AIO_offered became the only feature used.
+  #93.67% of people who were not offered AIO did not renew, 96.6% of people who were offered AIO renewed.
+  for_today <- reduce_number_of_distinct_values(for_today)
   dtree <- rpart(renewed ~ ., data = for_today)
 }
 
@@ -108,24 +112,27 @@ reduce_number_of_distinct_values <- function(for_today)
       names_in_order <- names(tx[order(-tx)])
 	  if (length(names_in_order) > k)
 	  {
-	    cat(paste("column = ", column, "\n", sep = ""))
-		print(tx[order(-tx)])
+	    #cat(paste("\n\ncolumn = ", column, "\n", sep = ""))
+		#print(tx[order(-tx)])
         top_names <- names_in_order[1:(k - 1)]	 
         if ("" %in% top_names)
         {
          top_names <- names_in_order[1:k]
 		 top_names <- top_names[top_names != ""]
         }
-	    print(top_names)
-	    for_today[, (column) := ifelse(get(column) %in% top_names, get(column), "Other")]
-	    print(table(for_today[, get(column)]))
+	    #print(top_names)
+		set(for_today, j = column, value = ifelse(for_today[[column]] %in% top_names, as.character(for_today[[column]]), "Other"))
+	    #print(table(for_today[, get(column)]))
+		#for_today[, column := as.factor(for_today[, get(column)])]
 	  }
 	}
   }
+  for_today
 }
 
-
-
-
+comet_data <- load_comet_data()
+#for_today <- prepare_for_contract_renewal(comet_data)
+#reduce_number_of_distinct_values(for_today)
+dtree <- analyze_contract_renewal(comet_data)
 
 
