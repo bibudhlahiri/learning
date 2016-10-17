@@ -220,7 +220,8 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
                       "PUP_WR102621", "PUP_WR102596", "PromoOfferMix", "PromoAmt", "PromoOfferMix_Before", "PromoAmt_Before", 
 					  "CSSC_CALLS_AFTER30", "VENDOR_CALLS_AFTER30", "renewed")
   for_today <- for_today[, .SD, .SDcols = cols_to_retain]
-  
+  opfile <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\Tree_output.txt"
+  sink(file = opfile)
   for (i in 1:T)
   {
     features <- cols_to_retain
@@ -236,28 +237,43 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
 	  print_dtree(dtree)
 	}
   }
+  sink()
   dtree
+}
+
+get_path_to_node <- function(node_id)
+{
+  j <- node_id
+  path <- c()
+  while (j > 1)
+  {
+    path <- c(path, j)
+	j <- floor(j/2)
+  }
+  sort(path)
 }
 
 #thr_majority_size_in_node tells how much the size of the majority group in a node should be,
 #as a fraction of the original population. thr_majority tells at least how much the probability of the 
 #majority class in a node should be.
-print_dtree <- function(dtree, thr_majority_size_in_node = 0.01, thr_majority = 0.6)
+print_dtree <- function(dtree, thr_majority_size_in_node = 0.05, thr_majority = 0.6)
 {
   tree_data <- dtree$frame
   population_size <- tree_data[1, "n"]
   n_nodes <- nrow(tree_data)
   tree_data$node_id <- rownames(tree_data)
-  for (i in 1:n_nodes)
+  cat("\n\n")
+  for (i in 2:n_nodes) #Don't print root
   {
     majority_prob <- max(tree_data[i, "yval2"][4], tree_data[i, "yval2"][5])
 	majority_size_in_node <- tree_data[i, "n"] - tree_data[i, "dev"]
-	cat(paste("From node ", tree_data[i, "node_id"], ", majority_size as a fraction of population = ",
-	          majority_size_in_node/population_size, "\n", sep = ""))
+	#cat(paste("From node ", tree_data[i, "node_id"], ", majority_size as a fraction of population = ",
+	#          majority_size_in_node/population_size, "\n", sep = ""))
 	if (majority_size_in_node >= (thr_majority_size_in_node*population_size) && majority_prob >= thr_majority)
 	{
-	  cat(paste("From node ", tree_data[i, "node_id"], ", ", 
-	            majority_size_in_node, " accounts ", 
+	  path <- paste(get_path_to_node(as.numeric(tree_data[i, "node_id"])), collapse = " -> ")
+	  cat(paste("Along path ", path, ", ", 
+	            majority_size_in_node, " (", round(100*majority_size_in_node/population_size, 2), "% of population) ", 	
 				ifelse((tree_data[i, "yval"] == 2), "renewed", "did not renew"), "\n", sep = ""))
 	}
   }
