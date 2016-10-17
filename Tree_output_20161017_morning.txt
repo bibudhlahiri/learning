@@ -1,0 +1,890 @@
+Insight: 30.8% (about 1/3rd) of the accounts in the sample did not renew
+
+formula_str = renewed ~ CLLI8 + PromoOfferMix + STATE + VENDOR_CALLS_AFTER30 + CSSC_CALLS_AFTER30
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: 2/3rd of total accounts, all of which had no CSSC calls after 30 days, did not renew.
+
+
+formula_str = renewed ~ PromoAmt_Before + PromoOfferMix + STATE + BUNDLE_NAME_DATA + PUP_WR102596
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) STATE=Other 10720 2374 FALSE (0.7785448 0.2214552) *
+   3) STATE=MD,NJ,NY,PA 13509 5098 FALSE (0.6226220 0.3773780)  
+     6) PromoAmt_Before>=19.425 9019 2953 FALSE (0.6725801 0.3274199) *
+     7) PromoAmt_Before< 19.425 4490 2145 FALSE (0.5222717 0.4777283)  
+      14) PUP_WR102596=Y 2752 1082 FALSE (0.6068314 0.3931686) *
+      15) PUP_WR102596= 1738  675 TRUE (0.3883774 0.6116226) *
+
+
+Along path 2, 8346(34.45% of population) did not renew
+Along path 3, 8411(34.71% of population) did not renew
+Along path 3 -> 6, 6066(25.04% of population) did not renew
+Along path 3 -> 7 -> 14, 1670(6.89% of population) did not renew
+Insight: About 7% of the total accounts, all of which are in MD, NJ, NY and PA, and received a promot amount less than $20, 
+and had a priceup PUP_WR102596, did not renew
+
+
+formula_str = renewed ~ NEW_BUNDLE_NAME_DATA + BUNDLE_NAME + PromoOfferMix + CLLI8 + VENDOR_CALLS_AFTER30
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) VENDOR_CALLS_AFTER30< 0.5 23184 6777 FALSE (0.7076863 0.2923137) *
+  3) VENDOR_CALLS_AFTER30>=0.5 1045  350 TRUE (0.3349282 0.6650718) *
+
+
+Along path 2, 16407(67.72% of population) did not renew
+Insight: For 2/3rd of all accounts, there were no vendor calls in after 30 days. None of them renewed.
+
+
+formula_str = renewed ~ MDU_FLAG + NEW_BUNDLE_NAME_DATA + VENDOR_CALLS_AFTER30 + STATE + PUP_WR102596
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) STATE=Other 10720 2374 FALSE (0.7785448 0.2214552) *
+  3) STATE=MD,NJ,NY,PA 13509 5098 FALSE (0.6226220 0.3773780)  
+    6) VENDOR_CALLS_AFTER30< 0.5 12723 4577 FALSE (0.6402578 0.3597422) *
+    7) VENDOR_CALLS_AFTER30>=0.5 786  265 TRUE (0.3371501 0.6628499) *
+
+
+Along path 2, 8346(34.45% of population) did not renew
+Along path 3, 8411(34.71% of population) did not renew
+Along path 3 -> 6, 8146(33.62% of population) did not renew
+Insight: 1/3rd of all accounts, all of which were in MD,NJ,NY,PA, there were no vendor calls in after 30 days. None of them renewed.
+
+formula_str = renewed ~ PromoOfferMix_Before + NEW_BUNDLE_NAME + MODEL_DECILE + PromoAmt + CLLI8
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.7350503 0.2649497) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.5215981 0.4784019)  
+     6) PromoOfferMix_Before=Acq,Swt+Acq 1289  400 FALSE (0.6896819 0.3103181) *
+     7) PromoOfferMix_Before=CRM,Other,Swt+Lead+Acq 3642 1683 TRUE (0.4621087 0.5378913)  
+      14) PromoAmt< 4.025 1783  779 FALSE (0.5630959 0.4369041)  
+        28) PromoOfferMix_Before=CRM,Swt+Lead+Acq 579   80 FALSE (0.8618307 0.1381693) *
+        29) PromoOfferMix_Before=Other 1204  505 TRUE (0.4194352 0.5805648) *
+      15) PromoAmt>=4.025 1859  679 TRUE (0.3652501 0.6347499)  
+        30) MODEL_DECILE>=8.5 605  244 FALSE (0.5966942 0.4033058) *
+        31) MODEL_DECILE< 8.5 1254  318 TRUE (0.2535885 0.7464115) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Insight: 59% of all accounts, all of which had a decile score < 4.5 (high risk), did not renew.
+
+
+formula_str = renewed ~ CSSC_CALLS_AFTER30 + MDU_FLAG + PromoOfferMix_Before + PromoOfferMix + NEW_BUNDLE_NAME_DATA
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+
+
+formula_str = renewed ~ CLLI8 + BUNDLE_NAME + MODEL_DECILE + NEW_BUNDLE_NAME_DATA + PUP_WR102621
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.69160923 0.30839077)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.73505026 0.26494974) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.52159805 0.47840195)  
+     6) NEW_BUNDLE_NAME_DATA=25/25 Mbps,NONE 1194  202 FALSE (0.83082077 0.16917923) *
+     7) NEW_BUNDLE_NAME_DATA=50/50 Mbps,75/75 Mbps,Other 3737 1580 TRUE (0.42279904 0.57720096)  
+      14) MODEL_DECILE>=8.5 1298  502 FALSE (0.61325116 0.38674884) *
+      15) MODEL_DECILE< 8.5 2439  784 TRUE (0.32144321 0.67855679)  
+        30) CLLI8=IRNGTXXA,SNMNCAXPPSA,TAMPFLXAPSA 164   10 FALSE (0.93902439 0.06097561) *
+        31) CLLI8=NYCKNYWMPS0,Other 2275  630 TRUE (0.27692308 0.72307692) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Insight: Duplicate insights.
+Along path 3 -> 7 -> 15, 1655(6.83% of population) renewed
+Along path 3 -> 7 -> 15 -> 31, 1645(6.79% of population) renewed
+Insight: About 7% of population, all of which had a risk score of 5, 6, 7 or 8 (and therefore low risk), and had newly taken 
+the bundles 50/50 Mbps, 75/75 Mbps or Other, and were all based in NYCKNYWMPS0, renewed.
+
+
+formula_str = renewed ~ VENDOR_CALLS_AFTER30 + PUP_WR102596 + CLLI8 + PUP_WR102621 + STATE
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) STATE=Other 10720 2374 FALSE (0.7785448 0.2214552) *
+  3) STATE=MD,NJ,NY,PA 13509 5098 FALSE (0.6226220 0.3773780)  
+    6) VENDOR_CALLS_AFTER30< 0.5 12723 4577 FALSE (0.6402578 0.3597422) *
+    7) VENDOR_CALLS_AFTER30>=0.5 786  265 TRUE (0.3371501 0.6628499) *
+
+
+Along path 2, 8346(34.45% of population) did not renew
+Along path 3, 8411(34.71% of population) did not renew
+Along path 3 -> 6, 8146(33.62% of population) did not renew
+Insight: Duplicate insight.
+
+
+formula_str = renewed ~ NEW_BUNDLE_NAME + NEW_BUNDLE_NAME_DATA + MODEL_DECILE + PromoOfferMix + BUNDLE_NAME_DATA
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.7350503 0.2649497) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.5215981 0.4784019)  
+     6) BUNDLE_NAME_DATA=25/25 Mbps,NONE 1193  201 FALSE (0.8315172 0.1684828) *
+     7) BUNDLE_NAME_DATA=50/50 Mbps,75/75 Mbps,Other 3738 1580 TRUE (0.4226859 0.5773141)  
+      14) MODEL_DECILE>=8.5 1298  502 FALSE (0.6132512 0.3867488) *
+      15) MODEL_DECILE< 8.5 2440  784 TRUE (0.3213115 0.6786885) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Along path 3 -> 7 -> 15, 1656(6.83% of population) renewed
+Insight: Duplicate insight
+
+
+formula_str = renewed ~ CSSC_CALLS_AFTER30 + NEW_BUNDLE_NAME + PromoOfferMix_Before + MODEL_DECILE + BUNDLE_NAME_DATA
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371)  
+     4) MODEL_DECILE< 4.5 17738 4170 FALSE (0.7649115 0.2350885) *
+     5) MODEL_DECILE>=4.5 4666 2151 FALSE (0.5390056 0.4609944)  
+      10) BUNDLE_NAME_DATA=25/25 Mbps,NONE 1174  190 FALSE (0.8381601 0.1618399) *
+      11) BUNDLE_NAME_DATA=50/50 Mbps,75/75 Mbps,Other 3492 1531 TRUE (0.4384307 0.5615693)  
+        22) MODEL_DECILE>=8.5 1219  451 FALSE (0.6300246 0.3699754) *
+        23) MODEL_DECILE< 8.5 2273  763 TRUE (0.3356797 0.6643203)  
+          46) PromoOfferMix_Before=Acq,Swt+Acq 664  264 FALSE (0.6024096 0.3975904) *
+          47) PromoOfferMix_Before=CRM,Other,Swt+Lead+Acq 1609  363 TRUE (0.2256060 0.7743940) *
+   3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+Along path 2 -> 4, 13568(56% of population) did not renew
+Insight: 13568 accounts, all of which did not have any CSSC call in after-30-day window, and had a risk score of 4 or less (high risk),
+did not renew.
+Along path 2 -> 5 -> 11 -> 23, 1510(6.23% of population) renewed
+Insight: 1510 accounts, all of which did not have any CSSC call in after-30-day window, and had a risk score between 5 and 8 (low risk),
+and had taken bundles 50/50 Mbps, 75/75 Mbps or Other, renewed.
+Along path 2 -> 5 -> 11 -> 23 -> 47, 1246(5.14% of population) renewed
+Insight: 1246 accounts, all of which did not have any CSSC call in after-30-day window, and had a risk score between 5 and 8 (low risk),
+and had taken bundles 50/50 Mbps, 75/75 Mbps or Other, and for whom PromoOfferMix_Before was CRM, Other or Swt+Lead+Acq, renewed.
+
+
+formula_str = renewed ~ PUP_WR102621 + STATE + PromoAmt + BUNDLE_NAME + PromoAmt_Before
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) STATE=Other 10720 2374 FALSE (0.7785448 0.2214552) *
+   3) STATE=MD,NJ,NY,PA 13509 5098 FALSE (0.6226220 0.3773780)  
+     6) PromoAmt_Before>=19.425 9019 2953 FALSE (0.6725801 0.3274199) *
+     7) PromoAmt_Before< 19.425 4490 2145 FALSE (0.5222717 0.4777283)  
+      14) PUP_WR102621=Y 2563 1025 FALSE (0.6000780 0.3999220) *
+      15) PUP_WR102621= 1927  807 TRUE (0.4187857 0.5812143) *
+
+
+Along path 2, 8346(34.45% of population) did not renew
+Along path 3, 8411(34.71% of population) did not renew
+Along path 3 -> 6, 6066(25.04% of population) did not renew
+Insight: Duplicate insight
+Along path 3 -> 7 -> 14, 1538(6.35% of population) did not renew
+Insight: 1538 accounts, all of which were from MD, NJ, NY or PA, and got a PromoAmt_Before less than $19.425, and 
+received price-up PUP_WR102621, did not renew.
+
+
+formula_str = renewed ~ MDU_FLAG + PromoOfferMix_Before + PromoAmt_Before + PUP_WR102621 + CSSC_CALLS_AFTER30
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+
+
+formula_str = renewed ~ PUP_WR102621 + VENDOR_CALLS_AFTER30 + BUNDLE_NAME + NEW_BUNDLE_NAME + PromoAmt_Before
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.69160923 0.30839077)  
+   2) VENDOR_CALLS_AFTER30< 0.5 23184 6777 FALSE (0.70768634 0.29231366)  
+     4) PromoAmt_Before>=19.03 16035 3972 FALSE (0.75229186 0.24770814)  
+       8) NEW_BUNDLE_NAME=FiOS TV Extreme HD,FiOS TV Preferred HD,FiOS TV Prime HD,FiOS TV Ultimate HD 9054 1789 FALSE (0.80240778 0.19759222) *
+       9) NEW_BUNDLE_NAME=Other 6981 2183 FALSE (0.68729408 0.31270592)  
+        18) BUNDLE_NAME=Other 6601 1831 FALSE (0.72261779 0.27738221) *
+        19) BUNDLE_NAME=FiOS TV Extreme HD,FiOS TV Preferred HD,FiOS TV Prime HD,FiOS TV Ultimate HD 380   28 TRUE (0.07368421 0.92631579) *
+     5) PromoAmt_Before< 19.03 7149 2805 FALSE (0.60763743 0.39236257)  
+      10) NEW_BUNDLE_NAME=FiOS TV Extreme HD,FiOS TV Preferred HD,FiOS TV Prime HD 2837  848 FALSE (0.70109270 0.29890730) *
+      11) NEW_BUNDLE_NAME=FiOS TV Ultimate HD,Other 4312 1957 FALSE (0.54615028 0.45384972)  
+        22) BUNDLE_NAME=FiOS TV Ultimate HD,Other 4148 1800 FALSE (0.56605593 0.43394407) *
+        23) BUNDLE_NAME=FiOS TV Extreme HD,FiOS TV Preferred HD,FiOS TV Prime HD 164    7 TRUE (0.04268293 0.95731707) *
+   3) VENDOR_CALLS_AFTER30>=0.5 1045  350 TRUE (0.33492823 0.66507177) *
+
+
+Along path 2, 16407(67.72% of population) did not renew
+Insight: Duplicate insight
+Along path 2 -> 4, 12063(49.79% of population) did not renew
+Insight: About 50% of the accounts, for whom there were no vendor calls in after-30 day window, but the PromoAmt_Before was $19.03 or
+higher, did not renew.
+Along path 2 -> 4 -> 8, 7265(29.98% of population) did not renew
+Along path 2 -> 4 -> 9, 4798(19.8% of population) did not renew
+Along path 2 -> 4 -> 9 -> 18, 4770(19.69% of population) did not renew
+Along path 2 -> 5, 4344(17.93% of population) did not renew
+Insight: About 18% of the total accounts, for whom there were no vendor calls in after-30 day window, and PromoAmt_Before was less than
+$19.03, did not renew.
+Along path 2 -> 5 -> 10, 1989(8.21% of population) did not renew
+Insight: About 8% of the total accounts, for whom there were no vendor calls in after-30 day window, and PromoAmt_Before was less than
+$19.03, and NEW_BUNDLE_NAME was FiOS TV Extreme HD, FiOS TV Preferred HD or FiOS TV Prime HD, did not renew.
+
+
+formula_str = renewed ~ PromoOfferMix_Before + VENDOR_CALLS_AFTER30 + BUNDLE_NAME_DATA + CSSC_CALLS_AFTER30 + PromoOfferMix
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371)  
+    4) VENDOR_CALLS_AFTER30< 0.5 21683 5847 FALSE (0.7303417 0.2696583) *
+    5) VENDOR_CALLS_AFTER30>=0.5 721  247 TRUE (0.3425798 0.6574202) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+Along path 2 -> 4, 15836(65.36% of population) did not renew
+Insight: About 2/3rd of all accounts, none of which had a CSSC call or a vendor call in after-30 days, did not renew.
+
+
+formula_str = renewed ~ PromoAmt + PromoAmt_Before + MODEL_DECILE + VENDOR_CALLS_AFTER30 + NEW_BUNDLE_NAME
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.7350503 0.2649497)  
+     4) VENDOR_CALLS_AFTER30< 0.5 18422 4546 FALSE (0.7532298 0.2467702) *
+     5) VENDOR_CALLS_AFTER30>=0.5 876  309 TRUE (0.3527397 0.6472603) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.5215981 0.4784019)  
+     6) PromoAmt_Before>=29.005 1406  451 FALSE (0.6792319 0.3207681) *
+     7) PromoAmt_Before< 29.005 3525 1617 TRUE (0.4587234 0.5412766)  
+      14) PromoAmt< 4.025 1762  784 FALSE (0.5550511 0.4449489)  
+        28) PromoAmt_Before>=9.295 572   85 FALSE (0.8513986 0.1486014) *
+        29) PromoAmt_Before< 9.295 1190  491 TRUE (0.4126050 0.5873950) *
+      15) PromoAmt>=4.025 1763  639 TRUE (0.3624504 0.6375496)  
+        30) MODEL_DECILE>=8.5 578  240 FALSE (0.5847751 0.4152249) *
+        31) MODEL_DECILE< 8.5 1185  301 TRUE (0.2540084 0.7459916) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Comment: Duplicate insight.
+Along path 2 -> 4, 13876(57.27% of population) did not renew
+Insight: For 57% of all accounts, the risk score was 4 or less (high risk), and there were no vendor calls in after-30 days, 
+and none of them renewed.
+
+
+formula_str = renewed ~ PromoOfferMix + PromoAmt_Before + MDU_FLAG + NEW_BUNDLE_NAME_DATA + PUP_WR102596
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) PromoAmt_Before>=19.03 16762 4428 FALSE (0.7358310 0.2641690) *
+   3) PromoAmt_Before< 19.03 7467 3044 FALSE (0.5923396 0.4076604)  
+     6) NEW_BUNDLE_NAME_DATA=25/25 Mbps,50/50 Mbps,NONE 4966 1768 FALSE (0.6439791 0.3560209) *
+     7) NEW_BUNDLE_NAME_DATA=75/75 Mbps,Other 2501 1225 TRUE (0.4898041 0.5101959)  
+      14) PUP_WR102596=Y 1273  542 FALSE (0.5742341 0.4257659) *
+      15) PUP_WR102596= 1228  494 TRUE (0.4022801 0.5977199) *
+
+
+Along path 2, 12334(50.91% of population) did not renew
+Along path 3 -> 6, 3198(13.2% of population) did not renew
+Insight: 13% of all accounts, all of which had PromoAmt_Before less than $19, and had NEW_BUNDLE_NAME_DATA 25/25 Mbps, 50/50 Mbps, or NONE,
+did not renew.
+
+
+formula_str = renewed ~ MDU_FLAG + NEW_BUNDLE_NAME_DATA + NEW_BUNDLE_NAME + STATE + CSSC_CALLS_AFTER30
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+
+
+formula_str = renewed ~ PUP_WR102621 + CSSC_CALLS_AFTER30 + STATE + PromoAmt + VENDOR_CALLS_AFTER30
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Comment: Duplicate insight.
+
+
+formula_str = renewed ~ NEW_BUNDLE_NAME + PUP_WR102596 + VENDOR_CALLS_AFTER30 + MODEL_DECILE + CSSC_CALLS_AFTER30
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371)  
+     4) MODEL_DECILE< 4.5 17738 4170 FALSE (0.7649115 0.2350885)  
+       8) VENDOR_CALLS_AFTER30< 0.5 17142 3789 FALSE (0.7789639 0.2210361) *
+       9) VENDOR_CALLS_AFTER30>=0.5 596  215 TRUE (0.3607383 0.6392617) *
+     5) MODEL_DECILE>=4.5 4666 2151 FALSE (0.5390056 0.4609944)  
+      10) MODEL_DECILE>=8.5 1411  486 FALSE (0.6555634 0.3444366) *
+      11) MODEL_DECILE< 8.5 3255 1590 TRUE (0.4884793 0.5115207)  
+        22) PUP_WR102596= 2455 1094 FALSE (0.5543788 0.4456212)  
+          44) MODEL_DECILE< 5.5 959  288 FALSE (0.6996872 0.3003128) *
+          45) MODEL_DECILE>=5.5 1496  690 TRUE (0.4612299 0.5387701) *
+        23) PUP_WR102596=Y 800  229 TRUE (0.2862500 0.7137500) *
+   3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+Along path 2 -> 4, 13568(56% of population) did not renew
+Comment: Duplicate insight.
+Along path 2 -> 4 -> 8, 13353(55.11% of population) did not renew
+Insight: 55% of all accounts, none of which had a CSSC call in after-30 days, had a risk score of 4 or less (high risk),
+and had no vendor calls in after-30 days either, did not renew.
+
+
+formula_str = renewed ~ NEW_BUNDLE_NAME_DATA + PromoOfferMix + CSSC_CALLS_AFTER30 + STATE + BUNDLE_NAME
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+
+
+formula_str = renewed ~ CSSC_CALLS_AFTER30 + VENDOR_CALLS_AFTER30 + PromoAmt + CLLI8 + NEW_BUNDLE_NAME
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371)  
+    4) VENDOR_CALLS_AFTER30< 0.5 21683 5847 FALSE (0.7303417 0.2696583) *
+    5) VENDOR_CALLS_AFTER30>=0.5 721  247 TRUE (0.3425798 0.6574202) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Comment: Duplicate insight.
+Along path 2 -> 4, 15836(65.36% of population) did not renew
+Comment: Duplicate insight.
+
+
+formula_str = renewed ~ PromoOfferMix_Before + PUP_WR102621 + PromoAmt + VENDOR_CALLS_AFTER30 + STATE
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) STATE=Other 10720 2374 FALSE (0.7785448 0.2214552) *
+   3) STATE=MD,NJ,NY,PA 13509 5098 FALSE (0.6226220 0.3773780)  
+     6) VENDOR_CALLS_AFTER30< 0.5 12723 4577 FALSE (0.6402578 0.3597422)  
+      12) PromoAmt>=17.35 8110 2490 FALSE (0.6929716 0.3070284) *
+      13) PromoAmt< 17.35 4613 2087 FALSE (0.5475829 0.4524171)  
+        26) PUP_WR102621=Y 2521  941 FALSE (0.6267354 0.3732646) *
+        27) PUP_WR102621= 2092  946 TRUE (0.4521989 0.5478011)  
+          54) PromoOfferMix_Before=Acq,Swt+Acq 254   86 FALSE (0.6614173 0.3385827) *
+          55) PromoOfferMix_Before=CRM,Other,Swt+Lead+Acq 1838  778 TRUE (0.4232862 0.5767138) *
+     7) VENDOR_CALLS_AFTER30>=0.5 786  265 TRUE (0.3371501 0.6628499) *
+
+
+Along path 2, 8346(34.45% of population) did not renew
+Along path 3, 8411(34.71% of population) did not renew
+Along path 3 -> 6, 8146(33.62% of population) did not renew
+Comment: Duplicate insight.
+Along path 3 -> 6 -> 12, 5620(23.2% of population) did not renew
+Along path 3 -> 6 -> 13 -> 26, 1580(6.52% of population) did not renew
+
+
+formula_str = renewed ~ VENDOR_CALLS_AFTER30 + PUP_WR102596 + STATE + NEW_BUNDLE_NAME + CLLI8
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) STATE=Other 10720 2374 FALSE (0.7785448 0.2214552) *
+   3) STATE=MD,NJ,NY,PA 13509 5098 FALSE (0.6226220 0.3773780)  
+     6) NEW_BUNDLE_NAME=FiOS TV Extreme HD,FiOS TV Preferred HD 3884 1030 FALSE (0.7348095 0.2651905) *
+     7) NEW_BUNDLE_NAME=FiOS TV Prime HD,FiOS TV Ultimate HD,Other 9625 4068 FALSE (0.5773506 0.4226494)  
+      14) VENDOR_CALLS_AFTER30< 0.5 9051 3662 FALSE (0.5954038 0.4045962) *
+      15) VENDOR_CALLS_AFTER30>=0.5 574  168 TRUE (0.2926829 0.7073171) *
+
+
+Along path 2, 8346(34.45% of population) did not renew
+Along path 3, 8411(34.71% of population) did not renew
+Along path 3 -> 6, 2854(11.78% of population) did not renew
+
+
+formula_str = renewed ~ NEW_BUNDLE_NAME + CLLI8 + BUNDLE_NAME + CSSC_CALLS_AFTER30 + PUP_WR102621
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+
+
+formula_str = renewed ~ PUP_WR102621 + PromoOfferMix + BUNDLE_NAME_DATA + BUNDLE_NAME + VENDOR_CALLS_AFTER30
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) VENDOR_CALLS_AFTER30< 0.5 23184 6777 FALSE (0.7076863 0.2923137) *
+  3) VENDOR_CALLS_AFTER30>=0.5 1045  350 TRUE (0.3349282 0.6650718) *
+
+
+Along path 2, 16407(67.72% of population) did not renew
+
+
+formula_str = renewed ~ PromoAmt_Before + CSSC_CALLS_AFTER30 + MDU_FLAG + NEW_BUNDLE_NAME + PromoOfferMix
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+
+
+formula_str = renewed ~ MDU_FLAG + NEW_BUNDLE_NAME + VENDOR_CALLS_AFTER30 + STATE + MODEL_DECILE
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.7350503 0.2649497)  
+     4) VENDOR_CALLS_AFTER30< 0.5 18422 4546 FALSE (0.7532298 0.2467702) *
+     5) VENDOR_CALLS_AFTER30>=0.5 876  309 TRUE (0.3527397 0.6472603) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.5215981 0.4784019)  
+     6) STATE=Other 2420  750 FALSE (0.6900826 0.3099174) *
+     7) STATE=MD,NJ,NY,PA 2511  902 TRUE (0.3592194 0.6407806)  
+      14) MODEL_DECILE>=8.5 945  356 FALSE (0.6232804 0.3767196) *
+      15) MODEL_DECILE< 8.5 1566  313 TRUE (0.1998723 0.8001277) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Along path 2 -> 4, 13876(57.27% of population) did not renew
+Along path 3 -> 6, 1670(6.89% of population) did not renew
+Along path 3 -> 7, 1609(6.64% of population) renewed
+Along path 3 -> 7 -> 15, 1253(5.17% of population) renewed
+
+
+formula_str = renewed ~ CSSC_CALLS_AFTER30 + BUNDLE_NAME_DATA + MDU_FLAG + PUP_WR102621 + STATE
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+
+
+formula_str = renewed ~ BUNDLE_NAME_DATA + PromoOfferMix_Before + PromoAmt + CSSC_CALLS_AFTER30 + BUNDLE_NAME
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+
+
+formula_str = renewed ~ PromoOfferMix + STATE + NEW_BUNDLE_NAME + CLLI8 + BUNDLE_NAME
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.69160923 0.30839077)  
+   2) STATE=Other 10720 2374 FALSE (0.77854478 0.22145522) *
+   3) STATE=MD,NJ,NY,PA 13509 5098 FALSE (0.62262196 0.37737804)  
+     6) NEW_BUNDLE_NAME=FiOS TV Extreme HD,FiOS TV Preferred HD 3884 1030 FALSE (0.73480947 0.26519053) *
+     7) NEW_BUNDLE_NAME=FiOS TV Prime HD,FiOS TV Ultimate HD,Other 9625 4068 FALSE (0.57735065 0.42264935)  
+      14) BUNDLE_NAME=FiOS TV Prime HD,FiOS TV Ultimate HD,Other 9294 3753 FALSE (0.59619109 0.40380891) *
+      15) BUNDLE_NAME=FiOS TV Extreme HD,FiOS TV Preferred HD 331   16 TRUE (0.04833837 0.95166163) *
+
+
+Along path 2, 8346(34.45% of population) did not renew
+Along path 3, 8411(34.71% of population) did not renew
+Along path 3 -> 6, 2854(11.78% of population) did not renew
+
+
+formula_str = renewed ~ VENDOR_CALLS_AFTER30 + MDU_FLAG + MODEL_DECILE + BUNDLE_NAME + CLLI8
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.69160923 0.30839077)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.73505026 0.26494974)  
+     4) VENDOR_CALLS_AFTER30< 0.5 18422 4546 FALSE (0.75322983 0.24677017) *
+     5) VENDOR_CALLS_AFTER30>=0.5 876  309 TRUE (0.35273973 0.64726027) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.52159805 0.47840195)  
+     6) CLLI8=IRNGTXXA,SNMNCAXPPSA,TAMPFLXAPSA 223   14 FALSE (0.93721973 0.06278027) *
+     7) CLLI8=NYCKNYWMPS0,Other 4708 2345 FALSE (0.50191164 0.49808836)  
+      14) MODEL_DECILE>=8.5 1480  540 FALSE (0.63513514 0.36486486) *
+      15) MODEL_DECILE< 8.5 3228 1423 TRUE (0.44083024 0.55916976)  
+        30) MODEL_DECILE< 5.5 1167  484 FALSE (0.58526135 0.41473865) *
+        31) MODEL_DECILE>=5.5 2061  740 TRUE (0.35904901 0.64095099) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Along path 2 -> 4, 13876(57.27% of population) did not renew
+Along path 3 -> 7 -> 15 -> 31, 1321(5.45% of population) renewed
+
+
+formula_str = renewed ~ VENDOR_CALLS_AFTER30 + STATE + CSSC_CALLS_AFTER30 + PromoAmt_Before + NEW_BUNDLE_NAME_DATA
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+
+
+formula_str = renewed ~ PUP_WR102596 + MODEL_DECILE + CLLI8 + PromoAmt_Before + BUNDLE_NAME
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.7350503 0.2649497) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.5215981 0.4784019)  
+     6) PromoAmt_Before>=29.005 1406  451 FALSE (0.6792319 0.3207681) *
+     7) PromoAmt_Before< 29.005 3525 1617 TRUE (0.4587234 0.5412766)  
+      14) MODEL_DECILE>=8.5 1111  449 FALSE (0.5958596 0.4041404) *
+      15) MODEL_DECILE< 8.5 2414  955 TRUE (0.3956089 0.6043911)  
+        30) MODEL_DECILE< 5.5 854  349 FALSE (0.5913349 0.4086651) *
+        31) MODEL_DECILE>=5.5 1560  450 TRUE (0.2884615 0.7115385) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Along path 3 -> 7 -> 15, 1459(6.02% of population) renewed
+
+
+formula_str = renewed ~ PromoAmt + BUNDLE_NAME_DATA + PUP_WR102596 + VENDOR_CALLS_AFTER30 + PUP_WR102621
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) VENDOR_CALLS_AFTER30< 0.5 23184 6777 FALSE (0.7076863 0.2923137) *
+  3) VENDOR_CALLS_AFTER30>=0.5 1045  350 TRUE (0.3349282 0.6650718) *
+
+
+Along path 2, 16407(67.72% of population) did not renew
+
+
+formula_str = renewed ~ MODEL_DECILE + MDU_FLAG + NEW_BUNDLE_NAME + NEW_BUNDLE_NAME_DATA + BUNDLE_NAME_DATA
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.7350503 0.2649497) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.5215981 0.4784019)  
+     6) BUNDLE_NAME_DATA=25/25 Mbps,NONE 1193  201 FALSE (0.8315172 0.1684828) *
+     7) BUNDLE_NAME_DATA=50/50 Mbps,75/75 Mbps,Other 3738 1580 TRUE (0.4226859 0.5773141)  
+      14) MODEL_DECILE>=8.5 1298  502 FALSE (0.6132512 0.3867488) *
+      15) MODEL_DECILE< 8.5 2440  784 TRUE (0.3213115 0.6786885) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Along path 3 -> 7 -> 15, 1656(6.83% of population) renewed
+
+
+formula_str = renewed ~ VENDOR_CALLS_AFTER30 + PUP_WR102621 + PUP_WR102596 + STATE + NEW_BUNDLE_NAME_DATA
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) STATE=Other 10720 2374 FALSE (0.7785448 0.2214552) *
+  3) STATE=MD,NJ,NY,PA 13509 5098 FALSE (0.6226220 0.3773780)  
+    6) VENDOR_CALLS_AFTER30< 0.5 12723 4577 FALSE (0.6402578 0.3597422) *
+    7) VENDOR_CALLS_AFTER30>=0.5 786  265 TRUE (0.3371501 0.6628499) *
+
+
+Along path 2, 8346(34.45% of population) did not renew
+Along path 3, 8411(34.71% of population) did not renew
+Along path 3 -> 6, 8146(33.62% of population) did not renew
+
+
+formula_str = renewed ~ BUNDLE_NAME + PUP_WR102621 + PUP_WR102596 + PromoAmt + MODEL_DECILE
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.7350503 0.2649497) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.5215981 0.4784019)  
+     6) PromoAmt< 4.025 2234  825 FALSE (0.6307073 0.3692927) *
+     7) PromoAmt>=4.025 2697 1163 TRUE (0.4312199 0.5687801)  
+      14) MODEL_DECILE>=8.5 910  326 FALSE (0.6417582 0.3582418) *
+      15) MODEL_DECILE< 8.5 1787  579 TRUE (0.3240067 0.6759933) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Along path 3 -> 6, 1409(5.82% of population) did not renew
+
+
+formula_str = renewed ~ BUNDLE_NAME + PUP_WR102621 + PUP_WR102596 + STATE + CSSC_CALLS_AFTER30
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+  2) CSSC_CALLS_AFTER30< 0.5 22404 6321 FALSE (0.7178629 0.2821371) *
+  3) CSSC_CALLS_AFTER30>=0.5 1825  674 TRUE (0.3693151 0.6306849) *
+
+
+Along path 2, 16083(66.38% of population) did not renew
+Insight: Duplicate insight.
+
+
+formula_str = renewed ~ PUP_WR102596 + PromoAmt_Before + MDU_FLAG + CLLI8 + NEW_BUNDLE_NAME_DATA
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) PromoAmt_Before>=19.03 16762 4428 FALSE (0.7358310 0.2641690) *
+   3) PromoAmt_Before< 19.03 7467 3044 FALSE (0.5923396 0.4076604)  
+     6) NEW_BUNDLE_NAME_DATA=25/25 Mbps,50/50 Mbps,NONE 4966 1768 FALSE (0.6439791 0.3560209) *
+     7) NEW_BUNDLE_NAME_DATA=75/75 Mbps,Other 2501 1225 TRUE (0.4898041 0.5101959)  
+      14) PUP_WR102596=Y 1273  542 FALSE (0.5742341 0.4257659) *
+      15) PUP_WR102596= 1228  494 TRUE (0.4022801 0.5977199) *
+
+
+Along path 2, 12334(50.91% of population) did not renew
+Along path 3 -> 6, 3198(13.2% of population) did not renew
+
+
+formula_str = renewed ~ PUP_WR102621 + MODEL_DECILE + CLLI8 + VENDOR_CALLS_AFTER30 + PromoOfferMix
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.7350503 0.2649497)  
+     4) VENDOR_CALLS_AFTER30< 0.5 18422 4546 FALSE (0.7532298 0.2467702) *
+     5) VENDOR_CALLS_AFTER30>=0.5 876  309 TRUE (0.3527397 0.6472603) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.5215981 0.4784019)  
+     6) PromoOfferMix=Acq,Other,Swt+Acq,Swt+Lead+Acq 3345 1315 FALSE (0.6068759 0.3931241) *
+     7) PromoOfferMix=CRM 1586  542 TRUE (0.3417402 0.6582598)  
+      14) MODEL_DECILE>=8.5 514  213 FALSE (0.5856031 0.4143969) *
+      15) MODEL_DECILE< 8.5 1072  241 TRUE (0.2248134 0.7751866) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Along path 2 -> 4, 13876(57.27% of population) did not renew
+Along path 3 -> 6, 2030(8.38% of population) did not renew
+
+
+formula_str = renewed ~ MODEL_DECILE + PUP_WR102596 + NEW_BUNDLE_NAME_DATA + PromoOfferMix_Before + VENDOR_CALLS_AFTER30
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.7350503 0.2649497)  
+     4) VENDOR_CALLS_AFTER30< 0.5 18422 4546 FALSE (0.7532298 0.2467702) *
+     5) VENDOR_CALLS_AFTER30>=0.5 876  309 TRUE (0.3527397 0.6472603) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.5215981 0.4784019)  
+     6) NEW_BUNDLE_NAME_DATA=25/25 Mbps,NONE 1194  202 FALSE (0.8308208 0.1691792) *
+     7) NEW_BUNDLE_NAME_DATA=50/50 Mbps,75/75 Mbps,Other 3737 1580 TRUE (0.4227990 0.5772010)  
+      14) MODEL_DECILE>=8.5 1298  502 FALSE (0.6132512 0.3867488) *
+      15) MODEL_DECILE< 8.5 2439  784 TRUE (0.3214432 0.6785568)  
+        30) PromoOfferMix_Before=Acq,Swt+Acq 709  296 FALSE (0.5825106 0.4174894) *
+        31) PromoOfferMix_Before=CRM,Other,Swt+Lead+Acq 1730  371 TRUE (0.2144509 0.7855491) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Along path 2 -> 4, 13876(57.27% of population) did not renew
+Along path 3 -> 7 -> 15, 1655(6.83% of population) renewed
+Along path 3 -> 7 -> 15 -> 31, 1359(5.61% of population) renewed
+
+
+formula_str = renewed ~ MDU_FLAG + PromoAmt_Before + PUP_WR102621 + PromoOfferMix + MODEL_DECILE
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.7350503 0.2649497) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.5215981 0.4784019)  
+     6) PromoOfferMix=Acq,Other,Swt+Acq,Swt+Lead+Acq 3345 1315 FALSE (0.6068759 0.3931241)  
+      12) PromoAmt_Before>=9.295 2053  567 FALSE (0.7238188 0.2761812) *
+      13) PromoAmt_Before< 9.295 1292  544 TRUE (0.4210526 0.5789474) *
+     7) PromoOfferMix=CRM 1586  542 TRUE (0.3417402 0.6582598)  
+      14) MODEL_DECILE>=8.5 514  213 FALSE (0.5856031 0.4143969) *
+      15) MODEL_DECILE< 8.5 1072  241 TRUE (0.2248134 0.7751866) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Along path 3 -> 6, 2030(8.38% of population) did not renew
+Along path 3 -> 6 -> 12, 1486(6.13% of population) did not renew
+
+
+formula_str = renewed ~ MODEL_DECILE + NEW_BUNDLE_NAME + BUNDLE_NAME_DATA + BUNDLE_NAME + PromoAmt
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.69160923 0.30839077)  
+   2) MODEL_DECILE< 4.5 19298 5113 FALSE (0.73505026 0.26494974)  
+     4) NEW_BUNDLE_NAME=FiOS TV Extreme HD,FiOS TV Preferred HD,FiOS TV Prime HD,FiOS TV Ultimate HD 11048 2300 FALSE (0.79181752 0.20818248) *
+     5) NEW_BUNDLE_NAME=Other 8250 2813 FALSE (0.65903030 0.34096970)  
+      10) BUNDLE_NAME=Other 7665 2263 FALSE (0.70476190 0.29523810) *
+      11) BUNDLE_NAME=FiOS TV Extreme HD,FiOS TV Preferred HD,FiOS TV Prime HD,FiOS TV Ultimate HD 585   35 TRUE (0.05982906 0.94017094) *
+   3) MODEL_DECILE>=4.5 4931 2359 FALSE (0.52159805 0.47840195)  
+     6) BUNDLE_NAME_DATA=25/25 Mbps,NONE 1193  201 FALSE (0.83151718 0.16848282) *
+     7) BUNDLE_NAME_DATA=50/50 Mbps,75/75 Mbps,Other 3738 1580 TRUE (0.42268593 0.57731407)  
+      14) MODEL_DECILE>=8.5 1298  502 FALSE (0.61325116 0.38674884) *
+      15) MODEL_DECILE< 8.5 2440  784 TRUE (0.32131148 0.67868852) *
+
+
+Along path 2, 14185(58.55% of population) did not renew
+Along path 2 -> 4, 8748(36.11% of population) did not renew
+Along path 2 -> 5, 5437(22.44% of population) did not renew
+Along path 2 -> 5 -> 10, 5402(22.3% of population) did not renew
+Along path 3 -> 7 -> 15, 1656(6.83% of population) renewed
+
+
+formula_str = renewed ~ NEW_BUNDLE_NAME + CLLI8 + PromoAmt_Before + STATE + VENDOR_CALLS_AFTER30
+n= 24229 
+
+node), split, n, loss, yval, (yprob)
+      * denotes terminal node
+
+ 1) root 24229 7472 FALSE (0.6916092 0.3083908)  
+   2) STATE=Other 10720 2374 FALSE (0.7785448 0.2214552)  
+     4) VENDOR_CALLS_AFTER30< 0.5 10461 2200 FALSE (0.7896951 0.2103049) *
+     5) VENDOR_CALLS_AFTER30>=0.5 259   85 TRUE (0.3281853 0.6718147) *
+   3) STATE=MD,NJ,NY,PA 13509 5098 FALSE (0.6226220 0.3773780)  
+     6) NEW_BUNDLE_NAME=FiOS TV Extreme HD,FiOS TV Preferred HD 3884 1030 FALSE (0.7348095 0.2651905) *
+     7) NEW_BUNDLE_NAME=FiOS TV Prime HD,FiOS TV Ultimate HD,Other 9625 4068 FALSE (0.5773506 0.4226494)  
+      14) VENDOR_CALLS_AFTER30< 0.5 9051 3662 FALSE (0.5954038 0.4045962) *
+      15) VENDOR_CALLS_AFTER30>=0.5 574  168 TRUE (0.2926829 0.7073171) *
+
+
+Along path 2, 8346(34.45% of population) did not renew
+Along path 2 -> 4, 8261(34.1% of population) did not renew
+Along path 3, 8411(34.71% of population) did not renew
+Along path 3 -> 6, 2854(11.78% of population) did not renew
