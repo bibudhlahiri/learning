@@ -29,7 +29,10 @@ load_comet_data <- function()
   is_column_name <- unlist(lapply(from_schema_file, check_if_column_name))
   column_names <- from_schema_file[which(is_column_name == TRUE)]
   setnames(comet_data, names(comet_data), column_names)
-  sample_size <- 20000
+  
+  comet_data[, MODEL_DECILE := ifelse((MODEL_DECILE == -1), 9, MODEL_DECILE)]
+  
+  sample_size <- 60000
   sampled_comet_data <- comet_data[sample(nrow(comet_data), sample_size), ]
   sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\SAMPLED_COMET_DATA_2016.TXT"
   write.table(sampled_comet_data, sample_filename, sep = "|", row.names = FALSE, col.names = TRUE, quote = FALSE)
@@ -71,11 +74,13 @@ check_if_column_name <- function(input)
 
 prepare_for_contract_renewal <- function(comet_data)
 {
-  minus_90_date <- Sys.Date() - 90
-  plus_90_date <- Sys.Date() + 90
+  minus_180_date <- Sys.Date() - 180
+  #minus_90_date <- Sys.Date() - 90
+  #plus_90_date <- Sys.Date() + 90
   comet_data[, TRACKER_DT := gsub("/", "-", comet_data$TRACKER_DT)]
   setkey(comet_data, TRACKER_DT)
-  for_today <- comet_data[((TRACKER_DT >= as.character(minus_90_date)) & (TRACKER_DT <= as.character(plus_90_date))),]
+  #for_today <- comet_data[((TRACKER_DT >= as.character(minus_90_date)) & (TRACKER_DT <= as.character(plus_90_date))),]
+  for_today <- comet_data[((TRACKER_DT >= as.character(minus_180_date)) & (TRACKER_DT <= as.character(Sys.Date()))),]
   cat(paste("nrow(for_today) = ", nrow(for_today), "\n", sep = ""))
   
   #Before dropping dates, generate corresponding factor variables
@@ -84,17 +89,17 @@ prepare_for_contract_renewal <- function(comet_data)
   for_today[, CRM_offered := (CRM_OFFER_DT != "")]
   for_today[, video_disconnected := (VIDEO_DISCONNECT_DT != "")]
   for_today[, data_disconnected := (DATA_DISCONNECT_DT != "")]
-  for_today[, account_disconnected := (ACCT_DISCONNECT_DT != "")]
+  for_today[, account_disconnected := (ACCT_DISCONNECT_DT != "")] #0.97% of for_today is account_disconnected
   
   cols <- c("STATE", "ACCT_SERVICE_TYPE", "CONTROL_GROUP", "TRACKER_LOCK", "VIDEO_CONTROLLABLE", "BUNDLE_NAME", "NEW_BUNDLE_NAME", 
             "MDU_FLAG", "AIO_OFFER_NAME", "VIDEO_NOT_CONTROLLABLE", "DATA_NOT_CONTROLLABLE", "DATA_CONTROLLABLE", "AIO_CHANNEL_NAME",
 			"PromoOfferMix", "IONT_OFFER", "PromoOfferMix_Before", "BUNDLE_NAME_DATA", "NEW_BUNDLE_NAME_DATA", "CLLI8", "DATA_MOVES",
-			"VIDEO_MOVES", "PUP_WR97646", "PUP_WR98238", "PUP_WR102621", "PUP_WR102596",
+			"VIDEO_MOVES", "PUP_WR97646", "PUP_WR98238", "PUP_WR102621", "PUP_WR102596", "VIDEO_DSICONNECT_RSN_CD", "DATA_DSICONNECT_RSN_CD",
 			"renewed", "AIO_offered", "CRM_offered", "video_disconnected", "data_disconnected", "account_disconnected")
   for_today[,(cols) := lapply(.SD, as.factor), .SDcols = cols]
   for_today[ ,c("ACCTSK", "TRACKER_DT", "TRACKER_EXEC_DT", "RENEW_DATE", "AIO_OFFER_DT", 
                 "CRM_OFFER_DT", "VIDEO_DISCONNECT_DT", "DATA_DISCONNECT_DT", "NEW_CONTRACT_END_DATE", 
-				"ACCT_STRT_DT", "ACCT_DISCONNECT_DT", "CLLI8") := NULL]
+				"ACCT_STRT_DT", "ACCT_DISCONNECT_DT") := NULL]
   for_today
 }
 
@@ -159,7 +164,7 @@ reduce_number_of_distinct_values <- function(for_today)
 }
 
 #Create a forest of decision trees with sampled feature sets.
-el_yunque <- function(comet_data, F = 5, T = 50)
+el_yunque_sample_features_with_equal_prob <- function(comet_data, F = 5, T = 50)
 {
   for_today <- prepare_for_contract_renewal(comet_data)
   for_today <- reduce_number_of_distinct_values(for_today)
@@ -176,9 +181,86 @@ el_yunque <- function(comet_data, F = 5, T = 50)
 	  #No point in printing decision trees with root node only
 	  cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
 	  print(dtree)
+	  print_dtree(dtree)
 	}
   }
   dtree
+}
+
+el_yunque_sample_features_with_input_prob <- function(comet_data, F = 5, T = 50)
+{
+  for_today <- prepare_for_contract_renewal(comet_data)
+  for_today <- reduce_number_of_distinct_values(for_today)
+  filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\COMET_Data_Weight_for_Impetus_POC_processed.csv"
+  column_weights <- fread(filename, header = TRUE, sep = ",", stringsAsFactors = FALSE, colClasses = c("character", "numeric"), data.table = TRUE)
+  sampling_probs <- column_weights$Weight/sum(column_weights$Weight)
+  
+  for (i in 1:T)
+  {
+	sampled_features <- column_weights$ColumnName[sample(nrow(column_weights), F, prob = sampling_probs)]
+	formula_str <- paste("renewed ~ ", paste(sampled_features, collapse = " + "), sep = "")
+    dtree <- rpart(as.formula(formula_str), data = for_today)
+	if (!is.null(dtree$splits))
+	{
+	  #No point in printing decision trees with root node only
+	  cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
+	  print(dtree)
+	  print_dtree(dtree)
+	}
+  }
+  dtree
+}
+
+el_yunque_sample_features_from_business_provided_features <- function(comet_data, F = 5, T = 50)
+{
+  for_today <- prepare_for_contract_renewal(comet_data)
+  for_today <- reduce_number_of_distinct_values(for_today)
+  cols_to_retain <- c("MODEL_DECILE", "MDU_FLAG", "STATE", "CLLI8", 
+                      "BUNDLE_NAME", "NEW_BUNDLE_NAME", "BUNDLE_NAME_DATA", "NEW_BUNDLE_NAME_DATA",
+                      "PUP_WR102621", "PUP_WR102596", "PromoOfferMix", "PromoAmt", "PromoOfferMix_Before", "PromoAmt_Before", 
+					  "CSSC_CALLS_AFTER30", "VENDOR_CALLS_AFTER30", "renewed")
+  for_today <- for_today[, .SD, .SDcols = cols_to_retain]
+  
+  for (i in 1:T)
+  {
+    features <- cols_to_retain
+	features <- features[features != "renewed"]
+	sampled_features <- features[sample(length(features), F)]
+	formula_str <- paste("renewed ~ ", paste(sampled_features, collapse = " + "), sep = "")
+    dtree <- rpart(as.formula(formula_str), data = for_today)
+	if (!is.null(dtree$splits))
+	{
+	  #No point in printing decision trees with root node only
+	  cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
+	  print(dtree)
+	  print_dtree(dtree)
+	}
+  }
+  dtree
+}
+
+#thr_majority_size_in_node tells how much the size of the majority group in a node should be,
+#as a fraction of the original population. thr_majority tells at least how much the probability of the 
+#majority class in a node should be.
+print_dtree <- function(dtree, thr_majority_size_in_node = 0.01, thr_majority = 0.6)
+{
+  tree_data <- dtree$frame
+  population_size <- tree_data[1, "n"]
+  n_nodes <- nrow(tree_data)
+  tree_data$node_id <- rownames(tree_data)
+  for (i in 1:n_nodes)
+  {
+    majority_prob <- max(tree_data[i, "yval2"][4], tree_data[i, "yval2"][5])
+	majority_size_in_node <- tree_data[i, "n"] - tree_data[i, "dev"]
+	cat(paste("From node ", tree_data[i, "node_id"], ", majority_size as a fraction of population = ",
+	          majority_size_in_node/population_size, "\n", sep = ""))
+	if (majority_size_in_node >= (thr_majority_size_in_node*population_size) && majority_prob >= thr_majority)
+	{
+	  cat(paste("From node ", tree_data[i, "node_id"], ", ", 
+	            majority_size_in_node, " accounts ", 
+				ifelse((tree_data[i, "yval"] == 2), "renewed", "did not renew"), "\n", sep = ""))
+	}
+  }
 }
 
 #comet_data <- load_comet_data()
@@ -186,7 +268,8 @@ comet_data <- load_comet_sample()
 #for_today <- prepare_for_contract_renewal(comet_data)
 #reduce_number_of_distinct_values(for_today)
 #dtree <- analyze_contract_renewal(comet_data)
-dtree <- el_yunque(comet_data)
+#dtree <- el_yunque(comet_data)
+dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
 
 
 
