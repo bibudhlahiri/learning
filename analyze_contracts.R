@@ -138,6 +138,7 @@ reduce_number_of_distinct_values <- function(for_today)
 {
   k <- 5
   columns <- names(for_today)
+  columns <- columns[(columns != "STATE")]
   for (column in columns)
   {
     if (is.factor(for_today[, get(column)]))
@@ -146,20 +147,18 @@ reduce_number_of_distinct_values <- function(for_today)
       names_in_order <- names(tx[order(-tx)])
 	  if (length(names_in_order) > k)
 	  {
-	    #cat(paste("\n\ncolumn = ", column, "\n", sep = ""))
-		#print(tx[order(-tx)])
         top_names <- names_in_order[1:(k - 1)]	 
         if ("" %in% top_names)
         {
          top_names <- names_in_order[1:k]
 		 top_names <- top_names[top_names != ""]
         }
-	    #print(top_names)
 		set(for_today, j = column, value = ifelse(for_today[[column]] %in% top_names, as.character(for_today[[column]]), "Other"))
-	    #print(table(for_today[, get(column)]))
 	  }
 	}
   }
+  #Among states, put CA, TX, FL in "Other" bucket
+  for_today[, STATE := ifelse((STATE %in% c("CA", "TX", "FL")), "Other", as.character(for_today[, STATE]))]
   for_today
 }
 
@@ -220,7 +219,13 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
                       "PUP_WR102621", "PUP_WR102596", "PromoOfferMix", "PromoAmt", "PromoOfferMix_Before", "PromoAmt_Before", 
 					  "CSSC_CALLS_AFTER30", "VENDOR_CALLS_AFTER30", "renewed")
   for_today <- for_today[, .SD, .SDcols = cols_to_retain]
-  opfile <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\Tree_output.txt"
+  
+  timestr <- as.character(Sys.time())
+  timestr <- gsub("-", "_", timestr)
+  timestr <- gsub(" ", "_", timestr)
+  timestr <- gsub(":", "_", timestr)
+  opfile <- paste("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\Tree_output_", timestr, ".txt", sep = "")
+  
   sink(file = opfile)
   for (i in 1:T)
   {
