@@ -39,6 +39,46 @@ load_comet_data <- function()
   comet_data
 }
 
+analyze_wire_centers <- function(comet_data)
+{
+  setkey(comet_data, STATE, CLLI8)
+  by_state_wc <- comet_data[, list(n_accounts = length(ACCTSK)), by = list(STATE, CLLI8)]
+  
+  #There are wire centers which are in multiple states. For now, take the state in which the wire center has maximum accounts,
+  #and for all accounts in that wire center, update the state values to that state.
+  if (FALSE)
+  {
+    #There are 7498 distinct values of CLLI8 but 8783 rows in by_state_wc
+    tx <- table(by_state_wc[, CLLI8])
+    tx <- tx[order(-tx)]
+    wc_in_multiple_states <- as.data.table(tx)
+    names(wc_in_multiple_states) <- c("CLLI8", "n_states")
+    wc_in_multiple_states <- wc_in_multiple_states[(n_states > 1), ]
+  }
+  setkey(by_state_wc, CLLI8, n_accounts)
+  by_state_wc <- by_state_wc[order(CLLI8, -n_accounts)]
+  wc_largest_state <- by_state_wc[, .SD[1], by = CLLI8] #Back to 7498 states
+}
+
+update_states <- function(comet_data)
+{
+  wc_largest_state <- analyze_wire_centers(comet_data)
+  setkey(wc_largest_state, CLLI8)
+  comet_data[, STATE := apply(comet_data, 1, function(row)get_state_for_wc(as.character(row["CLLI8"]), wc_largest_state))]
+  #Alternative: join comet_data and wc_largest_state by CLLI8
+  
+  setkey(comet_data, STATE, CLLI8)
+  by_state_wc <- comet_data[, list(n_accounts = length(ACCTSK)), by = list(STATE, CLLI8)]
+  cat(paste("nrow(by_state_wc) = ", nrow(by_state_wc), "\n", sep = ""))
+  
+  comet_data
+}
+
+get_state_for_wc <- function(wirecenter, wc_largest_state)
+{
+  wc_largest_state[(CLLI8 == wirecenter), STATE]
+}
+
 load_comet_sample <- function()
 {
   sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\SAMPLED_COMET_DATA_2016.TXT"
@@ -284,13 +324,15 @@ print_dtree <- function(dtree, thr_majority_size_in_node = 0.05, thr_majority = 
   }
 }
 
-#comet_data <- load_comet_data()
-comet_data <- load_comet_sample()
+comet_data <- load_comet_data()
+#comet_data <- load_comet_sample()
 #for_today <- prepare_for_contract_renewal(comet_data)
 #reduce_number_of_distinct_values(for_today)
 #dtree <- analyze_contract_renewal(comet_data)
 #dtree <- el_yunque(comet_data)
-dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
+#dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
+wc_largest_state <- analyze_wire_centers(comet_data)
+comet_data <- update_states(comet_data)
 
 
 
