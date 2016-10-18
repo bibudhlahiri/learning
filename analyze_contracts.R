@@ -33,6 +33,7 @@ load_comet_data <- function()
   comet_data[, MODEL_DECILE := ifelse((MODEL_DECILE == -1), 9, MODEL_DECILE)]
   wc_largest_state <- analyze_wire_centers(comet_data)
   comet_data <- update_states(comet_data)
+  comet_data <- create_regions(comet_data)
   
   sample_size <- 60000
   sampled_comet_data <- comet_data[sample(nrow(comet_data), sample_size), ]
@@ -57,7 +58,6 @@ analyze_wire_centers <- function(comet_data)
 update_states <- function(comet_data)
 {
   wc_largest_state <- analyze_wire_centers(comet_data)
-  
   #Join comet_data and wc_largest_state by CLLI8
   names(wc_largest_state) <- c("CLLI8", "largest_state")
   setkey(wc_largest_state, CLLI8)
@@ -65,12 +65,35 @@ update_states <- function(comet_data)
   comet_data <- comet_data[wc_largest_state, nomatch = 0]
   comet_data[, STATE := NULL]
   setnames(comet_data, "largest_state", "STATE")
-  
   #Check back after replacement
   setkey(comet_data, STATE, CLLI8)
   by_state_wc <- comet_data[, list(n_accounts = length(ACCTSK)), by = list(STATE, CLLI8)]
   cat(paste("nrow(by_state_wc) = ", nrow(by_state_wc), "\n", sep = ""))
+  comet_data
+}
+
+#Create regions at a level of granularity between state and CLLI8. Let the wire centers with 5000 or more accounts in 
+#a state remain as-is, put all other wire centers in a single bucket.
+create_regions <- function(comet_data, thr_wc = 5000)
+{
+  setkey(comet_data, STATE, CLLI8)
+  by_state_wc <- comet_data[, list(n_accounts = length(ACCTSK)), by = list(STATE, CLLI8)]
+  by_state_wc <- by_state_wc[order(STATE, -n_accounts)]
+  by_state_wc[, region := ifelse((n_accounts >= thr_wc), as.character(by_state_wc[, CLLI8]), 
+             paste(as.character(by_state_wc[, STATE]), "Other", sep = "_"))]
+  by_state_wc <- by_state_wc[, c("n_accounts", "STATE") := NULL]		 
   
+  setkey(comet_data, CLLI8)
+  setkey(by_state_wc, CLLI8)
+  comet_data <- comet_data[by_state_wc, nomatch = 0]
+  
+  #Check results in updated comet_data
+  setkey(comet_data, STATE, region)
+  by_state_region <- comet_data[, list(n_accounts = length(ACCTSK)), by = list(STATE, region)]
+  setkey(by_state_region, STATE, n_accounts)
+  by_state_region <- by_state_region[order(STATE, -n_accounts)]
+  print(by_state_region) #71 regions created with thr_wc = 5000
+
   comet_data
 }
 
@@ -78,8 +101,8 @@ load_comet_sample <- function()
 {
   sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\SAMPLED_COMET_DATA_2016.TXT"
   sampled_comet_data <- fread(sample_filename, header = TRUE, sep = "|", stringsAsFactors = FALSE, showProgress = TRUE, 
-                    colClasses = c("character", "character", "character", "numeric", "character",
-					               "Date", "Date", "character", "numeric", "Date", 
+                    colClasses = c("character", "character", "numeric", "character", #STATE moved to later part so taking one "character" off
+					               "Date", "Date", "character", "numeric", "Date",  
 								   "numeric", "numeric", "numeric", "numeric", "numeric",
 								   "numeric", "numeric", "numeric", "Date", "Date",
 								   "Date", "numeric", "Date", "numeric", "character",
@@ -94,8 +117,8 @@ load_comet_sample <- function()
 					               "Date", "numeric", "numeric", "character", "character",
 								   "character", "Date", "numeric", "numeric", "numeric",
 								   "numeric", "numeric", "numeric", "numeric", "numeric",
-								   "character", "character", "character", "character"),
-                    data.table = TRUE)
+								   "character", "character", "character", "character", #The 4 PUP fields
+								   "character", "character"), data.table = TRUE) #The last two "character" fields are added for STATE and region in reading sample
 }
 
 check_if_column_name <- function(input)
@@ -126,7 +149,7 @@ prepare_for_contract_renewal <- function(comet_data)
   for_today[, data_disconnected := (DATA_DISCONNECT_DT != "")]
   for_today[, account_disconnected := (ACCT_DISCONNECT_DT != "")] #0.97% of for_today is account_disconnected
   
-  cols <- c("STATE", "ACCT_SERVICE_TYPE", "CONTROL_GROUP", "TRACKER_LOCK", "VIDEO_CONTROLLABLE", "BUNDLE_NAME", "NEW_BUNDLE_NAME", 
+  cols <- c("STATE", "region", "ACCT_SERVICE_TYPE", "CONTROL_GROUP", "TRACKER_LOCK", "VIDEO_CONTROLLABLE", "BUNDLE_NAME", "NEW_BUNDLE_NAME", 
             "MDU_FLAG", "AIO_OFFER_NAME", "VIDEO_NOT_CONTROLLABLE", "DATA_NOT_CONTROLLABLE", "DATA_CONTROLLABLE", "AIO_CHANNEL_NAME",
 			"PromoOfferMix", "IONT_OFFER", "PromoOfferMix_Before", "BUNDLE_NAME_DATA", "NEW_BUNDLE_NAME_DATA", "CLLI8", "DATA_MOVES",
 			"VIDEO_MOVES", "PUP_WR97646", "PUP_WR98238", "PUP_WR102621", "PUP_WR102596", "VIDEO_DSICONNECT_RSN_CD", "DATA_DSICONNECT_RSN_CD",
@@ -173,11 +196,12 @@ reduce_number_of_distinct_values <- function(for_today)
 {
   k <- 5
   columns <- names(for_today)
-  columns <- columns[(columns != "STATE")]
+  columns <- columns[!(columns %in% c("STATE", "region"))]
   for (column in columns)
   {
     if (is.factor(for_today[, get(column)]))
 	{
+	  cat(paste("reduce_number_of_distinct_values for column = ", column, "\n", sep = ""))
 	  tx <- table(for_today[, get(column)])
       names_in_order <- names(tx[order(-tx)])
 	  if (length(names_in_order) > k)
@@ -249,7 +273,7 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
 {
   for_today <- prepare_for_contract_renewal(comet_data)
   for_today <- reduce_number_of_distinct_values(for_today)
-  cols_to_retain <- c("MODEL_DECILE", "MDU_FLAG", "STATE", "CLLI8", 
+  cols_to_retain <- c("MODEL_DECILE", "MDU_FLAG", "STATE", "region", #Replacing CLLI8 by region 
                       "BUNDLE_NAME", "NEW_BUNDLE_NAME", "BUNDLE_NAME_DATA", "NEW_BUNDLE_NAME_DATA",
                       "PUP_WR102621", "PUP_WR102596", "PromoOfferMix", "PromoAmt", "PromoOfferMix_Before", "PromoAmt_Before", 
 					  "CSSC_CALLS_AFTER30", "VENDOR_CALLS_AFTER30", "renewed")
@@ -319,13 +343,9 @@ print_dtree <- function(dtree, thr_majority_size_in_node = 0.05, thr_majority = 
   }
 }
 
-comet_data <- load_comet_data()
-#comet_data <- load_comet_sample()
-#for_today <- prepare_for_contract_renewal(comet_data)
-#reduce_number_of_distinct_values(for_today)
-#dtree <- analyze_contract_renewal(comet_data)
-#dtree <- el_yunque(comet_data)
-#dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
+#comet_data <- load_comet_data()
+comet_data <- load_comet_sample()
+dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
 
 
 
