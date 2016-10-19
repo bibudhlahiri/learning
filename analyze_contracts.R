@@ -3,28 +3,32 @@ library(data.table)
 
 load_comet_data <- function()
 {
-  filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\COMET_DATA_2016_1.TXT"
+  filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\COMET_DATA_2016_2.TXT"
   #Read 2,476,484 rows in 30 seconds
   comet_data <- fread(filename, header = FALSE, sep = "|", stringsAsFactors = FALSE, showProgress = TRUE, 
-                    colClasses = c("character", "character", "character", "numeric", "character",
-					               "Date", "Date", "character", "numeric", "Date", 
+                    colClasses = c("character", "numeric", "Date", "character", "character", #1-5
+					               "character", "numeric", "numeric", "numeric", "numeric", #6-10
+						           "numeric", "numeric", "numeric", "numeric", "numeric", #11-15
+								   "numeric", "numeric", "numeric", "numeric", "numeric", #16-20
 								   "numeric", "numeric", "numeric", "numeric", "numeric",
-								   "numeric", "numeric", "numeric", "Date", "Date",
-								   "Date", "numeric", "Date", "numeric", "character",
+								   "Date", "numeric", "numeric", "numeric", "numeric",
+								   "numeric", "numeric", "numeric", "numeric", "numeric",
+								   "Date", "numeric", "numeric", "numeric", "numeric",
+								   "Date", "numeric", "numeric", "numeric", "numeric",
+								   "numeric", "numeric", "numeric", "numeric", "numeric",
+								   "Date", "Date", "character", "character", "numeric",
 								   "numeric", "numeric", "numeric", "numeric", "numeric",
 								   "numeric", "numeric", "numeric", "numeric", "numeric",
 								   "numeric", "numeric", "numeric", "numeric", "numeric",
 								   "numeric", "numeric", "numeric", "numeric", "numeric",
-								   "character", "character", "character", "character", "Date",
-								   "character", "character", "character", "character", "character",
-								   "numeric", "character", "numeric", "numeric", "numeric",
-								   "character", "numeric", "character", "character", "numeric",
-					               "Date", "numeric", "numeric", "character", "character",
-								   "character", "Date", "numeric", "numeric", "numeric",
 								   "numeric", "numeric", "numeric", "numeric", "numeric",
-								   "character", "character", "character", "character"),
+								   "numeric", "numeric", "numeric", "numeric", "numeric",
+								   "numeric", "character", "character", "character", "character",
+								   "character", "character", "numeric", "character", "character", #91-95
+								   "numeric", "character", "character", "character", "character", #96-100
+								   "character", "Date", "character", "character"), #101-104
                     data.table = TRUE)
-  lines <- readLines("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\Schema.txt")
+  lines <- readLines("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\Schema.txt")
   from_schema_file <- unlist(strsplit(lines, " "))
   is_column_name <- unlist(lapply(from_schema_file, check_if_column_name))
   column_names <- from_schema_file[which(is_column_name == TRUE)]
@@ -37,15 +41,30 @@ load_comet_data <- function()
   
   sample_size <- 60000
   sampled_comet_data <- comet_data[sample(nrow(comet_data), sample_size), ]
-  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\SAMPLED_COMET_DATA_2016.TXT"
-  write.table(sampled_comet_data, sample_filename, sep = "|", row.names = FALSE, col.names = TRUE, quote = FALSE)
+  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\SAMPLED_COMET_DATA_2016.CSV"
+  write.table(sampled_comet_data, sample_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
   comet_data
 }
+
+check_if_column_name <- function(input)
+{
+  if ((input == "") || (substr(input, 1, nchar("VARCHAR")) == "VARCHAR") || (substr(input, 1, nchar("SMALLINT")) == "SMALLINT") ||
+      (substr(input, 1, nchar("INTDATE")) == "INTDATE") || (substr(input, 1, nchar("DECIMAL")) == "DECIMAL") || 
+	  (substr(input, 1, nchar("INTEGER")) == "INTEGER") || (substr(input, 1, nchar("CHAR")) == "CHAR") ||
+	  #New dataset has bunch of tabs
+	  (input == "\t") || (substr(input, 1, nchar("\tVARCHAR")) == "\tVARCHAR") || (substr(input, 1, nchar("\tSMALLINT")) == "\tSMALLINT") ||
+      (substr(input, 1, nchar("\tINTDATE")) == "\tINTDATE") || (substr(input, 1, nchar("\tDECIMAL")) == "\tDECIMAL") || 
+	  (substr(input, 1, nchar("\tINTEGER")) == "\tINTEGER") || (substr(input, 1, nchar("\tCHAR")) == "\tCHAR") ||
+	  (substr(input, 1, nchar("\tINT")) == "\tINT") || (substr(input, 1, nchar("\tDATE")) == "\tDATE") ||
+	  (substr(input, 1, nchar("DATE")) == "DATE"))
+	 return(FALSE)
+  return(TRUE)
+} 
 
 analyze_wire_centers <- function(comet_data)
 {
   setkey(comet_data, STATE, CLLI8)
-  by_state_wc <- comet_data[, list(n_accounts = length(ACCTSK)), by = list(STATE, CLLI8)]
+  by_state_wc <- comet_data[, list(n_accounts = length(AcctSK)), by = list(STATE, CLLI8)]
   
   #There are wire centers which are in multiple states. For now, take the state in which the wire center has maximum accounts,
   #and for all accounts in that wire center, update the state values to that state.
@@ -67,7 +86,7 @@ update_states <- function(comet_data)
   setnames(comet_data, "largest_state", "STATE")
   #Check back after replacement
   setkey(comet_data, STATE, CLLI8)
-  by_state_wc <- comet_data[, list(n_accounts = length(ACCTSK)), by = list(STATE, CLLI8)]
+  by_state_wc <- comet_data[, list(n_accounts = length(AcctSK)), by = list(STATE, CLLI8)]
   cat(paste("nrow(by_state_wc) = ", nrow(by_state_wc), "\n", sep = ""))
   comet_data
 }
@@ -77,7 +96,7 @@ update_states <- function(comet_data)
 create_regions <- function(comet_data, thr_wc = 5000)
 {
   setkey(comet_data, STATE, CLLI8)
-  by_state_wc <- comet_data[, list(n_accounts = length(ACCTSK)), by = list(STATE, CLLI8)]
+  by_state_wc <- comet_data[, list(n_accounts = length(AcctSK)), by = list(STATE, CLLI8)]
   by_state_wc <- by_state_wc[order(STATE, -n_accounts)]
   by_state_wc[, region := ifelse((n_accounts >= thr_wc), as.character(by_state_wc[, CLLI8]), 
              paste(as.character(by_state_wc[, STATE]), "Other", sep = "_"))]
@@ -89,7 +108,7 @@ create_regions <- function(comet_data, thr_wc = 5000)
   
   #Check results in updated comet_data
   setkey(comet_data, STATE, region)
-  by_state_region <- comet_data[, list(n_accounts = length(ACCTSK)), by = list(STATE, region)]
+  by_state_region <- comet_data[, list(n_accounts = length(AcctSK)), by = list(STATE, region)]
   setkey(by_state_region, STATE, n_accounts)
   by_state_region <- by_state_region[order(STATE, -n_accounts)]
   print(by_state_region) #71 regions created with thr_wc = 5000
@@ -99,36 +118,31 @@ create_regions <- function(comet_data, thr_wc = 5000)
 
 load_comet_sample <- function()
 {
-  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\SAMPLED_COMET_DATA_2016.TXT"
+  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\SAMPLED_COMET_DATA_2016.TXT"
   sampled_comet_data <- fread(sample_filename, header = TRUE, sep = "|", stringsAsFactors = FALSE, showProgress = TRUE, 
-                    colClasses = c("character", "character", "numeric", "character", #STATE moved to later part so taking one "character" off
-					               "Date", "Date", "character", "numeric", "Date",  
-								   "numeric", "numeric", "numeric", "numeric", "numeric",
-								   "numeric", "numeric", "numeric", "Date", "Date",
-								   "Date", "numeric", "Date", "numeric", "character",
-								   "numeric", "numeric", "numeric", "numeric", "numeric",
-								   "numeric", "numeric", "numeric", "numeric", "numeric",
-								   "numeric", "numeric", "numeric", "numeric", "numeric",
-								   "numeric", "numeric", "numeric", "numeric", "numeric",
-								   "character", "character", "character", "character", "Date",
-								   "character", "character", "character", "character", "character",
-								   "numeric", "character", "numeric", "numeric", "numeric",
-								   "character", "numeric", "character", "character", "numeric",
-					               "Date", "numeric", "numeric", "character", "character",
-								   "character", "Date", "numeric", "numeric", "numeric",
-								   "numeric", "numeric", "numeric", "numeric", "numeric",
-								   "character", "character", "character", "character", #The 4 PUP fields
-								   "character", "character"), data.table = TRUE) #The last two "character" fields are added for STATE and region in reading sample
+                    colClasses = c("character", "numeric", "Date", "character", "character", #1-5 (A-E)
+					               "numeric", "numeric", "numeric", "numeric", "numeric", #6-10 (F-J)
+						           "numeric", "numeric", "numeric", "numeric", "numeric", #11-15 (K-O)
+								   "numeric", "numeric", "numeric", "numeric", "numeric", #16-20 (P-T)
+								   "numeric", "numeric", "numeric", "numeric", "Date", #21-25 (U-Y)
+								   "numeric", "numeric", "numeric", "numeric", "numeric", #26-30 (Z-AD)
+								   "numeric", "numeric", "numeric", "numeric", "Date", #31-35 (AE-AI)
+								   "numeric", "numeric", "numeric", "numeric", "Date", #36-40 (AJ-AN)
+								   "numeric", "numeric", "numeric", "numeric", "numeric", #41-45 (AO-AS)
+								   "numeric", "numeric", "numeric", "numeric", "Date", #46-50 (AT-AX)
+								   "Date", "character", "character", "numeric", "numeric", #51-55 (AY-BC)
+								   "numeric", "numeric", "numeric", "numeric", "numeric", #56-60 (BD-BH)
+								   "numeric", "numeric", "numeric", "numeric", "numeric", #61-65 (BI-BM)
+								   "numeric", "numeric", "numeric", "numeric", "numeric", #66-70 (BN-BR)
+								   "numeric", "numeric", "numeric", "numeric", "numeric", #71-75 (BS-BW)
+								   "numeric", "numeric", "numeric", "numeric", "numeric", #76-80 (BX-CB)
+								   "numeric", "numeric", "numeric", "numeric", "numeric", #81-85 (CC-CG)
+								   "character", "character", "character", "character", "character", #86-90 (CH-CL)
+								   "character", "character", "numeric", "character", "numeric", #91-95 (CM-CQ)
+								   "character", "character", "character", "character", "character", #96-100 (CR-CV)
+								   "Date", "character", "character", "character", "character" #101-105 (CW-DA)
+								   ), data.table = TRUE) #The last two "character" fields are added for STATE and region in reading sample
 }
-
-check_if_column_name <- function(input)
-{
-  if ((input == "") || (substr(input, 1, nchar("VARCHAR")) == "VARCHAR") || (substr(input, 1, nchar("SMALLINT")) == "SMALLINT") ||
-      (substr(input, 1, nchar("INTDATE")) == "INTDATE") || (substr(input, 1, nchar("DECIMAL")) == "DECIMAL") || 
-	  (substr(input, 1, nchar("INTEGER")) == "INTEGER") || (substr(input, 1, nchar("CHAR")) == "CHAR"))
-	 return(FALSE)
-  return(TRUE)
-} 
 
 prepare_for_contract_renewal <- function(comet_data)
 {
@@ -155,7 +169,7 @@ prepare_for_contract_renewal <- function(comet_data)
 			"VIDEO_MOVES", "PUP_WR97646", "PUP_WR98238", "PUP_WR102621", "PUP_WR102596", "VIDEO_DSICONNECT_RSN_CD", "DATA_DSICONNECT_RSN_CD",
 			"renewed", "AIO_offered", "CRM_offered", "video_disconnected", "data_disconnected", "account_disconnected")
   for_today[,(cols) := lapply(.SD, as.factor), .SDcols = cols]
-  for_today[ ,c("ACCTSK", "TRACKER_DT", "TRACKER_EXEC_DT", "RENEW_DATE", "AIO_OFFER_DT", 
+  for_today[ ,c("AcctSK", "TRACKER_DT", "TRACKER_EXEC_DT", "RENEW_DATE", "AIO_OFFER_DT", 
                 "CRM_OFFER_DT", "VIDEO_DISCONNECT_DT", "DATA_DISCONNECT_DT", "NEW_CONTRACT_END_DATE", 
 				"ACCT_STRT_DT", "ACCT_DISCONNECT_DT") := NULL]
   for_today
@@ -276,7 +290,8 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
   cols_to_retain <- c("MODEL_DECILE", "MDU_FLAG", "STATE", "region", #Replacing CLLI8 by region 
                       "BUNDLE_NAME", "NEW_BUNDLE_NAME", "BUNDLE_NAME_DATA", "NEW_BUNDLE_NAME_DATA",
                       "PUP_WR102621", "PUP_WR102596", "PromoOfferMix", "PromoAmt", "PromoOfferMix_Before", "PromoAmt_Before", 
-					  "CSSC_CALLS_AFTER30", "VENDOR_CALLS_AFTER30", "renewed")
+					  "CSSC_CALLS_AFTER30", "VENDOR_CALLS_AFTER30", "CSSC_CALLS_BEFORE30", "VENDOR_CALLS_BEFORE30", 
+					  "CSSC_CALLS_BEFORE60", "VENDOR_CALLS_BEFORE60", "renewed")
   for_today <- for_today[, .SD, .SDcols = cols_to_retain]
   
   timestr <- as.character(Sys.time())
@@ -291,6 +306,11 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
     features <- cols_to_retain
 	features <- features[features != "renewed"]
 	sampled_features <- features[sample(length(features), F)]
+	#Force the usage of state and region
+	if (!("STATE" %in% sampled_features))
+	  sampled_features <- c(sampled_features, "STATE")
+	if (!("region" %in% sampled_features))
+	  sampled_features <- c(sampled_features, "region")
 	formula_str <- paste("renewed ~ ", paste(sampled_features, collapse = " + "), sep = "")
     dtree <- rpart(as.formula(formula_str), data = for_today)
 	if (!is.null(dtree$splits))
@@ -345,7 +365,7 @@ print_dtree <- function(dtree, thr_majority_size_in_node = 0.05, thr_majority = 
 
 #comet_data <- load_comet_data()
 comet_data <- load_comet_sample()
-dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
+#dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
 
 
 
