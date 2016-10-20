@@ -1,5 +1,6 @@
 library(rpart)
 library(data.table)
+library(party)
 
 load_comet_data <- function()
 {
@@ -148,9 +149,9 @@ prepare_for_disconnection <- function(comet_data)
 {
   minus_180_date <- Sys.Date() - 180
   comet_data[, TRACKER_DT := gsub("/", "-", comet_data$TRACKER_DT)]
+  comet_data[, ACCT_DISCONNECT_DT := gsub("/", "-", comet_data$ACCT_DISCONNECT_DT)]
   setkey(comet_data, TRACKER_DT)
-  for_today <- comet_data[(TRACKER_DT >= as.character(minus_180_date)),] #For churn, we are defining the base 
-  #as accounts which have contract expiry date starting from 6 months before to any time in future.
+  for_today <- comet_data[((TRACKER_DT >= as.character(minus_180_date)) & (TRACKER_DT <= as.character(Sys.Date()))),]
   cat(paste("nrow(for_today) = ", nrow(for_today), "\n", sep = ""))
   
   #Before dropping dates, generate corresponding factor variables
@@ -159,7 +160,8 @@ prepare_for_disconnection <- function(comet_data)
   for_today[, CRM_offered := (CRM_OFFER_DT != "")]
   for_today[, video_disconnected := (VIDEO_DISCONNECT_DT != "")]
   for_today[, data_disconnected := (DATA_DISCONNECT_DT != "")]
-  for_today[, account_disconnected := (ACCT_DISCONNECT_DT != "")] #2.03% of for_today is account_disconnected
+  for_today[, account_disconnected := as.numeric((ACCT_DISCONNECT_DT >= as.character(minus_180_date)) 
+                                                  & (ACCT_DISCONNECT_DT <= as.character(Sys.Date())))]
   
   cols <- c("STATE", "region", "ACCT_SERVICE_TYPE", "VIDEO_CONTROLLABLE",  
             "MDU_FLAG", "VIDEO_NOT_CONTROLLABLE", "DATA_NOT_CONTROLLABLE", "DATA_CONTROLLABLE", 
@@ -197,6 +199,9 @@ reduce_number_of_distinct_values <- function(for_today)
         }
 		set(for_today, j = column, value = ifelse(for_today[[column]] %in% top_names, as.character(for_today[[column]]), "Other"))
 	  }
+	  #Change back to type factor; if type becomes character, ctree() does not work
+	  cols <- c(column)
+	  for_today[,(cols) := lapply(.SD, as.factor), .SDcols = cols]
 	}
   }
   for_today
@@ -219,7 +224,7 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
   timestr <- gsub(" ", "_", timestr)
   timestr <- gsub(":", "_", timestr)
   cat(paste("timestr = ", timestr, "\n"))
-  opfile <- paste("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\churn_results\\Tree_output_", timestr, ".txt", sep = "")
+  opfile <- paste("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\disconnection_results\\Tree_output_", timestr, ".txt", sep = "")
   cat(paste("opfile = ", opfile, "\n"))
   
   sink(file = opfile)
@@ -234,14 +239,16 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
 	if (!("region" %in% sampled_features))
 	  sampled_features <- c(sampled_features, "region")
 	formula_str <- paste("account_disconnected ~ ", paste(sampled_features, collapse = " + "), sep = "")
-    dtree <- rpart(as.formula(formula_str), data = for_today, minsplit = 2, minbucket = 1)
-	if (!is.null(dtree$splits))
-	{
+    #dtree <- rpart(as.formula(formula_str), data = for_today, minsplit = 2, minbucket = 1)
+	#CART is not creating any real splits, so we are using conditional inference tree here which is picking up regions nicely
+	dtree <- ctree(as.formula(formula_str), data = for_today)
+	#if (!is.null(dtree$splits))
+	#{
 	  #No point in printing decision trees with root node only
 	  cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
 	  print(dtree)
-	  print_dtree(dtree)
-	}
+	  #print_dtree(dtree)
+	#}
   }
   sink()
   dtree
@@ -285,9 +292,10 @@ print_dtree <- function(dtree, thr_majority_size_in_node = 0.05, thr_majority = 
   }
 }
 
-comet_data <- load_comet_data()
+#comet_data <- load_comet_data()
 #comet_data <- load_comet_sample()
 #dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
+
 
 
 

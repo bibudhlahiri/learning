@@ -138,7 +138,7 @@ load_comet_sample <- function()
 								   "numeric", "numeric", "numeric", "numeric", "numeric", #76-80 (BX-CB)
 								   "numeric", "numeric", "numeric", "numeric", "numeric", #81-85 (CC-CG)
 								   "character", "character", "character", "character", "character", #86-90 (CH-CL)
-								   "character", "character", "numeric", "character", "numeric", #91-95 (CM-CQ)
+								   "character", "numeric", "character", "character", "numeric", #91-95 (CM-CQ)
 								   "character", "character", "character", "character", "character", #96-100 (CR-CV)
 								   "Date", "character", "character", "character", "character" #101-105 (CW-DA)
 								   ), data.table = TRUE) #The last two "character" fields are added for STATE and region in reading sample
@@ -147,11 +147,8 @@ load_comet_sample <- function()
 prepare_for_contract_renewal <- function(comet_data)
 {
   minus_180_date <- Sys.Date() - 180
-  #minus_90_date <- Sys.Date() - 90
-  #plus_90_date <- Sys.Date() + 90
   comet_data[, TRACKER_DT := gsub("/", "-", comet_data$TRACKER_DT)]
   setkey(comet_data, TRACKER_DT)
-  #for_today <- comet_data[((TRACKER_DT >= as.character(minus_90_date)) & (TRACKER_DT <= as.character(plus_90_date))),]
   for_today <- comet_data[((TRACKER_DT >= as.character(minus_180_date)) & (TRACKER_DT <= as.character(Sys.Date()))),]
   cat(paste("nrow(for_today) = ", nrow(for_today), "\n", sep = ""))
   
@@ -163,15 +160,16 @@ prepare_for_contract_renewal <- function(comet_data)
   for_today[, data_disconnected := (DATA_DISCONNECT_DT != "")]
   for_today[, account_disconnected := (ACCT_DISCONNECT_DT != "")] #0.97% of for_today is account_disconnected
   
-  cols <- c("STATE", "region", "ACCT_SERVICE_TYPE", "CONTROL_GROUP", "TRACKER_LOCK", "VIDEO_CONTROLLABLE", "BUNDLE_NAME", "NEW_BUNDLE_NAME", 
-            "MDU_FLAG", "AIO_OFFER_NAME", "VIDEO_NOT_CONTROLLABLE", "DATA_NOT_CONTROLLABLE", "DATA_CONTROLLABLE", "AIO_CHANNEL_NAME",
-			"PromoOfferMix", "IONT_OFFER", "PromoOfferMix_Before", "BUNDLE_NAME_DATA", "NEW_BUNDLE_NAME_DATA", "CLLI8", "DATA_MOVES",
-			"VIDEO_MOVES", "PUP_WR97646", "PUP_WR98238", "PUP_WR102621", "PUP_WR102596", "VIDEO_DSICONNECT_RSN_CD", "DATA_DSICONNECT_RSN_CD",
-			"renewed", "AIO_offered", "CRM_offered", "video_disconnected", "data_disconnected", "account_disconnected")
+  cols <- c("STATE", "region", "ACCT_SERVICE_TYPE", "VIDEO_CONTROLLABLE",  
+            "MDU_FLAG", "VIDEO_NOT_CONTROLLABLE", "DATA_NOT_CONTROLLABLE", "DATA_CONTROLLABLE", 
+			"PromoOfferMix", "IONT_OFFER", "PromoOfferMix_Before", "CLLI8", 
+			"PUP_WR102621", "PUP_WR102596", 
+			"renewed", "video_disconnected", "data_disconnected", "account_disconnected",
+			"Upgarde_Video", "Upgrade_Data", "Downgrade_Video", "Downgrade_Data", "Cust_PBA_M30", "Cust_PBA_30")
   for_today[,(cols) := lapply(.SD, as.factor), .SDcols = cols]
-  for_today[ ,c("AcctSK", "TRACKER_DT", "TRACKER_EXEC_DT", "RENEW_DATE", "AIO_OFFER_DT", 
-                "CRM_OFFER_DT", "VIDEO_DISCONNECT_DT", "DATA_DISCONNECT_DT", "NEW_CONTRACT_END_DATE", 
-				"ACCT_STRT_DT", "ACCT_DISCONNECT_DT") := NULL]
+  for_today[ ,c("AcctSK", "TRACKER_DT", "RENEW_DATE", "AIO_OFFER_DT", 
+                "CRM_OFFER_DT", "VIDEO_DISCONNECT_DT", "DATA_DISCONNECT_DT",
+				"ACCT_DISCONNECT_DT") := NULL]
   for_today
 }
 
@@ -215,7 +213,6 @@ reduce_number_of_distinct_values <- function(for_today)
   {
     if (is.factor(for_today[, get(column)]))
 	{
-	  cat(paste("reduce_number_of_distinct_values for column = ", column, "\n", sep = ""))
 	  tx <- table(for_today[, get(column)])
       names_in_order <- names(tx[order(-tx)])
 	  if (length(names_in_order) > k)
@@ -230,8 +227,6 @@ reduce_number_of_distinct_values <- function(for_today)
 	  }
 	}
   }
-  #Among states, put CA, TX, FL in "Other" bucket
-  for_today[, STATE := ifelse((STATE %in% c("CA", "TX", "FL")), "Other", as.character(for_today[, STATE]))]
   for_today
 }
 
@@ -288,17 +283,18 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
   for_today <- prepare_for_contract_renewal(comet_data)
   for_today <- reduce_number_of_distinct_values(for_today)
   cols_to_retain <- c("MODEL_DECILE", "MDU_FLAG", "STATE", "region", #Replacing CLLI8 by region 
-                      "BUNDLE_NAME", "NEW_BUNDLE_NAME", "BUNDLE_NAME_DATA", "NEW_BUNDLE_NAME_DATA",
                       "PUP_WR102621", "PUP_WR102596", "PromoOfferMix", "PromoAmt", "PromoOfferMix_Before", "PromoAmt_Before", 
 					  "CSSC_CALLS_AFTER30", "VENDOR_CALLS_AFTER30", "CSSC_CALLS_BEFORE30", "VENDOR_CALLS_BEFORE30", 
-					  "CSSC_CALLS_BEFORE60", "VENDOR_CALLS_BEFORE60", "renewed")
+					  "CSSC_CALLS_BEFORE60", "VENDOR_CALLS_BEFORE60", "renewed",
+					  "Upgarde_Video", "Upgrade_Data", "Downgrade_Video", "Downgrade_Data", "Cust_PBA_M30", "Cust_PBA_30",
+					  "PBA_M30_AMT", "PBA_30_AMT")
   for_today <- for_today[, .SD, .SDcols = cols_to_retain]
   
   timestr <- as.character(Sys.time())
   timestr <- gsub("-", "_", timestr)
   timestr <- gsub(" ", "_", timestr)
   timestr <- gsub(":", "_", timestr)
-  opfile <- paste("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\Tree_output_", timestr, ".txt", sep = "")
+  opfile <- paste("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\renewal_results\\Tree_output_", timestr, ".txt", sep = "")
   
   sink(file = opfile)
   for (i in 1:T)
@@ -365,7 +361,7 @@ print_dtree <- function(dtree, thr_majority_size_in_node = 0.05, thr_majority = 
 
 #comet_data <- load_comet_data()
 comet_data <- load_comet_sample()
-#dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
+dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
 
 
 

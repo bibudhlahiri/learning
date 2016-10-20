@@ -145,40 +145,42 @@ analyze_renewal_rates_by_region <- function(comet_data)
   by_region
 }
 
-analyze_churn_rates_by_state <- function(comet_data)
+analyze_disconnection_rates_by_state <- function(comet_data)
 {
   minus_180_date <- Sys.Date() - 180
   comet_data[, TRACKER_DT := gsub("/", "-", comet_data$TRACKER_DT)]
+  comet_data[, ACCT_DISCONNECT_DT := gsub("/", "-", comet_data$ACCT_DISCONNECT_DT)]
   setkey(comet_data, TRACKER_DT)
-  for_today <- comet_data[(TRACKER_DT >= as.character(minus_180_date)),] #For churn, we are defining the base 
-  #as accounts which have contract expiry date starting from 6 months before to any time in future.
+  for_today <- comet_data[((TRACKER_DT >= as.character(minus_180_date)) & (TRACKER_DT <= as.character(Sys.Date()))),]
   cat(paste("nrow(for_today) = ", nrow(for_today), "\n", sep = ""))
   
-  #Before dropping dates, generate corresponding factor variables
-  for_today[, account_disconnected := as.numeric(ACCT_DISCONNECT_DT != "")]
+  for_today[, account_disconnected := as.numeric((ACCT_DISCONNECT_DT >= as.character(minus_180_date)) 
+                                                  & (ACCT_DISCONNECT_DT <= as.character(Sys.Date())))]
   setkey(for_today, STATE)
   by_state <- for_today[, list(n_accounts = length(AcctSK), n_disconnected = sum(account_disconnected)), by = STATE]
-  by_state[, churn := n_disconnected/n_accounts]
-  by_state <- by_state[order(-churn)]
-  op_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\churn_results\\churn_rate_by_state.csv"
+  print(by_state)
+  by_state[, disconnection_rate := n_disconnected/n_accounts]
+  by_state <- by_state[order(-disconnection_rate)]
+  op_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\disconnection_results\\disconnection_rate_by_state.csv"
+  cat(paste("op_filename = ", op_filename, "\n", sep = ""))
   write.table(by_state, op_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
   by_state
 }
 
-analyze_churn_rates_by_region <- function(comet_data)
+analyze_disconnection_rates_by_region <- function(comet_data)
 {
   minus_180_date <- Sys.Date() - 180
   comet_data[, TRACKER_DT := gsub("/", "-", comet_data$TRACKER_DT)]
+  comet_data[, ACCT_DISCONNECT_DT := gsub("/", "-", comet_data$ACCT_DISCONNECT_DT)]
   setkey(comet_data, TRACKER_DT)
-  for_today <- comet_data[(TRACKER_DT >= as.character(minus_180_date)),] #For churn, we are defining the base 
-  #as accounts which have contract expiry date starting from 6 months before to any time in future.
+  for_today <- comet_data[((TRACKER_DT >= as.character(minus_180_date)) & (TRACKER_DT <= as.character(Sys.Date()))),]
   cat(paste("nrow(for_today) = ", nrow(for_today), "\n", sep = ""))
   
-  #Before dropping dates, generate corresponding factor variables
-  for_today[, account_disconnected := as.numeric(ACCT_DISCONNECT_DT != "")]
+  for_today[, account_disconnected := as.numeric((ACCT_DISCONNECT_DT >= as.character(minus_180_date)) 
+                                                  & (ACCT_DISCONNECT_DT <= as.character(Sys.Date())))]
   setkey(for_today, region)
   by_region <- for_today[, list(n_accounts = length(AcctSK), n_disconnected = sum(account_disconnected)), by = region]
-  by_region[, churn := n_disconnected/n_accounts]
+  by_region[, disconnection_rate := n_disconnected/n_accounts]
   
   #Add state column for ease of reading
   state_region <- unique(comet_data[, list(STATE, region)])
@@ -186,14 +188,33 @@ analyze_churn_rates_by_region <- function(comet_data)
   setkey(state_region, region)
   by_region <- by_region[state_region, nomatch = 0]
   
-  by_region <- by_region[order(-churn)]
-  op_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\churn_results\\churn_rate_by_region.csv"
+  by_region <- by_region[order(-disconnection_rate)]
+  op_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\disconnection_results\\disconnection_rate_by_region.csv"
   write.table(by_region, op_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
   by_region
+}
+
+analyze_high_low_disconnection_regions <- function(comet_data)
+{
+  setkey(comet_data, region)
+  minus_180_date <- Sys.Date() - 180
+  comet_data[, TRACKER_DT := gsub("/", "-", comet_data$TRACKER_DT)]
+  comet_data[, ACCT_DISCONNECT_DT := gsub("/", "-", comet_data$ACCT_DISCONNECT_DT)]
+  setkey(comet_data, TRACKER_DT)
+  for_today <- comet_data[((TRACKER_DT >= as.character(minus_180_date)) & (TRACKER_DT <= as.character(Sys.Date()))),]
+  cat(paste("nrow(for_today) = ", nrow(for_today), "\n", sep = ""))
+  
+  for_today[, account_disconnected := as.numeric((ACCT_DISCONNECT_DT >= as.character(minus_180_date)) 
+                                                  & (ACCT_DISCONNECT_DT <= as.character(Sys.Date())))]
+  high_disc <- for_today[(region %in% c("RCPKNJ01PS0", "NBWKNJNBPS1", "NWTNMAWAPS0", 
+                                      "ANNPMDANPS0", "NYCKNYWMPS0", "NYCMNYPSPS0", "PHLAPAMKPS1")),]
+  low_disc <- for_today[(!(region %in% c("RCPKNJ01PS0", "NBWKNJNBPS1", "NWTNMAWAPS0", 
+                                      "ANNPMDANPS0", "NYCKNYWMPS0", "NYCMNYPSPS0", "PHLAPAMKPS1"))),]
 }
 
 comet_data <- load_comet_data()
 #by_state <- analyze_renewal_rates_by_state(comet_data)
 #by_region <- analyze_renewal_rates_by_region(comet_data)
-by_state <- analyze_churn_rates_by_state(comet_data)
-by_region <- analyze_churn_rates_by_region(comet_data)
+by_state <- analyze_disconnection_rates_by_state(comet_data)
+by_region <- analyze_disconnection_rates_by_region(comet_data)
+
