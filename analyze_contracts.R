@@ -3,7 +3,7 @@ library(data.table)
 
 load_comet_data <- function()
 {
-  filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\COMET_DATA_2016_2.TXT"
+  filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\COMET_DATA_2016_3.TXT"
   #Read 2,476,484 rows in 30 seconds
   comet_data <- fread(filename, header = FALSE, sep = "|", stringsAsFactors = FALSE, showProgress = TRUE, 
                     colClasses = c("character", "numeric", "Date", "character", "character", #1-5
@@ -26,9 +26,10 @@ load_comet_data <- function()
 								   "numeric", "character", "character", "character", "character",
 								   "character", "character", "numeric", "character", "character", #91-95
 								   "numeric", "character", "character", "character", "character", #96-100
-								   "character", "Date", "character", "character"), #101-104
+								   "character", "Date", "character", "character", "character"     #101-104, last one for COMPETR1_NM
+								   ), 
                     data.table = TRUE)
-  lines <- readLines("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\Schema.txt")
+  lines <- readLines("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\Schema.txt")
   from_schema_file <- unlist(strsplit(lines, " "))
   is_column_name <- unlist(lapply(from_schema_file, check_if_column_name))
   column_names <- from_schema_file[which(is_column_name == TRUE)]
@@ -41,8 +42,8 @@ load_comet_data <- function()
   
   sample_size <- 60000
   sampled_comet_data <- comet_data[sample(nrow(comet_data), sample_size), ]
-  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\SAMPLED_COMET_DATA_2016.CSV"
-  write.table(sampled_comet_data, sample_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
+  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\SAMPLED_COMET_DATA_2016.TXT"
+  write.table(sampled_comet_data, sample_filename, sep = "|", row.names = FALSE, col.names = TRUE, quote = FALSE)
   comet_data
 }
 
@@ -56,7 +57,7 @@ check_if_column_name <- function(input)
       (substr(input, 1, nchar("\tINTDATE")) == "\tINTDATE") || (substr(input, 1, nchar("\tDECIMAL")) == "\tDECIMAL") || 
 	  (substr(input, 1, nchar("\tINTEGER")) == "\tINTEGER") || (substr(input, 1, nchar("\tCHAR")) == "\tCHAR") ||
 	  (substr(input, 1, nchar("\tINT")) == "\tINT") || (substr(input, 1, nchar("\tDATE")) == "\tDATE") ||
-	  (substr(input, 1, nchar("DATE")) == "DATE"))
+	  (substr(input, 1, nchar("DATE")) == "DATE") || (substr(input, 1, nchar("\tBYTEINT")) == "\tBYTEINT"))
 	 return(FALSE)
   return(TRUE)
 } 
@@ -118,7 +119,7 @@ create_regions <- function(comet_data, thr_wc = 5000)
 
 load_comet_sample <- function()
 {
-  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\SAMPLED_COMET_DATA_2016.TXT"
+  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\SAMPLED_COMET_DATA_2016.TXT"
   sampled_comet_data <- fread(sample_filename, header = TRUE, sep = "|", stringsAsFactors = FALSE, showProgress = TRUE, 
                     colClasses = c("character", "numeric", "Date", "character", "character", #1-5 (A-E)
 					               "numeric", "numeric", "numeric", "numeric", "numeric", #6-10 (F-J)
@@ -140,7 +141,9 @@ load_comet_sample <- function()
 								   "character", "character", "character", "character", "character", #86-90 (CH-CL)
 								   "character", "numeric", "character", "character", "numeric", #91-95 (CM-CQ)
 								   "character", "character", "character", "character", "character", #96-100 (CR-CV)
-								   "Date", "character", "character", "character", "character" #101-105 (CW-DA)
+								   "Date", "character", "character", 
+								   "character", #Added for COMPETR1_NM
+								   "character", "character" #101-106 (CW-DB)
 								   ), data.table = TRUE) #The last two "character" fields are added for STATE and region in reading sample
 }
 
@@ -159,13 +162,15 @@ prepare_for_contract_renewal <- function(comet_data)
   for_today[, video_disconnected := (VIDEO_DISCONNECT_DT != "")]
   for_today[, data_disconnected := (DATA_DISCONNECT_DT != "")]
   for_today[, account_disconnected := (ACCT_DISCONNECT_DT != "")] #0.97% of for_today is account_disconnected
+  for_today[, has_competitor := (COMPETR1_NM != "")]
   
   cols <- c("STATE", "region", "ACCT_SERVICE_TYPE", "VIDEO_CONTROLLABLE",  
             "MDU_FLAG", "VIDEO_NOT_CONTROLLABLE", "DATA_NOT_CONTROLLABLE", "DATA_CONTROLLABLE", 
 			"PromoOfferMix", "IONT_OFFER", "PromoOfferMix_Before", "CLLI8", 
 			"PUP_WR102621", "PUP_WR102596", 
 			"renewed", "video_disconnected", "data_disconnected", "account_disconnected",
-			"Upgarde_Video", "Upgrade_Data", "Downgrade_Video", "Downgrade_Data", "Cust_PBA_M30", "Cust_PBA_30")
+			"Upgarde_Video", "Upgrade_Data", "Downgrade_Video", "Downgrade_Data", "Cust_PBA_M30", "Cust_PBA_30",
+			"COMPETR1_NM", "has_competitor")
   for_today[,(cols) := lapply(.SD, as.factor), .SDcols = cols]
   for_today[ ,c("AcctSK", "TRACKER_DT", "RENEW_DATE", "AIO_OFFER_DT", 
                 "CRM_OFFER_DT", "VIDEO_DISCONNECT_DT", "DATA_DISCONNECT_DT",
@@ -230,71 +235,24 @@ reduce_number_of_distinct_values <- function(for_today)
   for_today
 }
 
-#Create a forest of decision trees with sampled feature sets.
-el_yunque_sample_features_with_equal_prob <- function(comet_data, F = 5, T = 50)
-{
-  for_today <- prepare_for_contract_renewal(comet_data)
-  for_today <- reduce_number_of_distinct_values(for_today)
-  
-  for (i in 1:T)
-  {
-    features <- names(for_today)
-	features <- features[features != "renewed"]
-	sampled_features <- features[sample(length(features), F)]
-	formula_str <- paste("renewed ~ ", paste(sampled_features, collapse = " + "), sep = "")
-    dtree <- rpart(as.formula(formula_str), data = for_today)
-	if (!is.null(dtree$splits))
-	{
-	  #No point in printing decision trees with root node only
-	  cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
-	  print(dtree)
-	  print_dtree(dtree)
-	}
-  }
-  dtree
-}
-
-el_yunque_sample_features_with_input_prob <- function(comet_data, F = 5, T = 50)
-{
-  for_today <- prepare_for_contract_renewal(comet_data)
-  for_today <- reduce_number_of_distinct_values(for_today)
-  filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016\\COMET_Data_Weight_for_Impetus_POC_processed.csv"
-  column_weights <- fread(filename, header = TRUE, sep = ",", stringsAsFactors = FALSE, colClasses = c("character", "numeric"), data.table = TRUE)
-  sampling_probs <- column_weights$Weight/sum(column_weights$Weight)
-  
-  for (i in 1:T)
-  {
-	sampled_features <- column_weights$ColumnName[sample(nrow(column_weights), F, prob = sampling_probs)]
-	formula_str <- paste("renewed ~ ", paste(sampled_features, collapse = " + "), sep = "")
-    dtree <- rpart(as.formula(formula_str), data = for_today)
-	if (!is.null(dtree$splits))
-	{
-	  #No point in printing decision trees with root node only
-	  cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
-	  print(dtree)
-	  print_dtree(dtree)
-	}
-  }
-  dtree
-}
-
 el_yunque_sample_features_from_business_provided_features <- function(comet_data, F = 5, T = 50)
 {
   for_today <- prepare_for_contract_renewal(comet_data)
   for_today <- reduce_number_of_distinct_values(for_today)
+  #print(table(for_today[, COMPETR1_NM]))
   cols_to_retain <- c("MODEL_DECILE", "MDU_FLAG", "STATE", "region", #Replacing CLLI8 by region 
                       "PUP_WR102621", "PUP_WR102596", "PromoOfferMix", "PromoAmt", "PromoOfferMix_Before", "PromoAmt_Before", 
 					  "CSSC_CALLS_AFTER30", "VENDOR_CALLS_AFTER30", "CSSC_CALLS_BEFORE30", "VENDOR_CALLS_BEFORE30", 
 					  "CSSC_CALLS_BEFORE60", "VENDOR_CALLS_BEFORE60", "renewed",
 					  "Upgarde_Video", "Upgrade_Data", "Downgrade_Video", "Downgrade_Data", "Cust_PBA_M30", "Cust_PBA_30",
-					  "PBA_M30_AMT", "PBA_30_AMT")
+					  "PBA_M30_AMT", "PBA_30_AMT", "COMPETR1_NM", "has_competitor")
   for_today <- for_today[, .SD, .SDcols = cols_to_retain]
   
   timestr <- as.character(Sys.time())
   timestr <- gsub("-", "_", timestr)
   timestr <- gsub(" ", "_", timestr)
   timestr <- gsub(":", "_", timestr)
-  opfile <- paste("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\renewal_results\\Tree_output_", timestr, ".txt", sep = "")
+  opfile <- paste("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\renewal_results\\Tree_output_", timestr, ".txt", sep = "")
   
   sink(file = opfile)
   for (i in 1:T)
@@ -361,7 +319,7 @@ print_dtree <- function(dtree, thr_majority_size_in_node = 0.05, thr_majority = 
 
 #comet_data <- load_comet_data()
 comet_data <- load_comet_sample()
-dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
+dtree <- el_yunque_sample_features_from_business_provided_features(comet_data) #Neither COMPETR1_NM nor has_competitor gets picked up
 
 
 
