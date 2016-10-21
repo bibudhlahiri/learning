@@ -4,7 +4,7 @@ library(party)
 
 load_comet_data <- function()
 {
-  filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\COMET_DATA_2016_2.TXT"
+  filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\COMET_DATA_2016_3.TXT"
   #Read 2,476,484 rows in 30 seconds
   comet_data <- fread(filename, header = FALSE, sep = "|", stringsAsFactors = FALSE, showProgress = TRUE, 
                     colClasses = c("character", "numeric", "Date", "character", "character", #1-5
@@ -27,9 +27,10 @@ load_comet_data <- function()
 								   "numeric", "character", "character", "character", "character",
 								   "character", "character", "numeric", "character", "character", #91-95
 								   "numeric", "character", "character", "character", "character", #96-100
-								   "character", "Date", "character", "character"), #101-104
+								   "character", "Date", "character", "character", "character"     #101-104, last one for COMPETR1_NM
+								   ), 
                     data.table = TRUE)
-  lines <- readLines("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\Schema.txt")
+  lines <- readLines("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\Schema.txt")
   from_schema_file <- unlist(strsplit(lines, " "))
   is_column_name <- unlist(lapply(from_schema_file, check_if_column_name))
   column_names <- from_schema_file[which(is_column_name == TRUE)]
@@ -42,8 +43,8 @@ load_comet_data <- function()
   
   sample_size <- 60000
   sampled_comet_data <- comet_data[sample(nrow(comet_data), sample_size), ]
-  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\SAMPLED_COMET_DATA_2016.CSV"
-  write.table(sampled_comet_data, sample_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
+  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\SAMPLED_COMET_DATA_2016.TXT"
+  write.table(sampled_comet_data, sample_filename, sep = "|", row.names = FALSE, col.names = TRUE, quote = FALSE)
   comet_data
 }
 
@@ -57,7 +58,7 @@ check_if_column_name <- function(input)
       (substr(input, 1, nchar("\tINTDATE")) == "\tINTDATE") || (substr(input, 1, nchar("\tDECIMAL")) == "\tDECIMAL") || 
 	  (substr(input, 1, nchar("\tINTEGER")) == "\tINTEGER") || (substr(input, 1, nchar("\tCHAR")) == "\tCHAR") ||
 	  (substr(input, 1, nchar("\tINT")) == "\tINT") || (substr(input, 1, nchar("\tDATE")) == "\tDATE") ||
-	  (substr(input, 1, nchar("DATE")) == "DATE"))
+	  (substr(input, 1, nchar("DATE")) == "DATE") || (substr(input, 1, nchar("\tBYTEINT")) == "\tBYTEINT"))
 	 return(FALSE)
   return(TRUE)
 } 
@@ -119,7 +120,7 @@ create_regions <- function(comet_data, thr_wc = 5000)
 
 load_comet_sample <- function()
 {
-  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\SAMPLED_COMET_DATA_2016.TXT"
+  sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\SAMPLED_COMET_DATA_2016.TXT"
   sampled_comet_data <- fread(sample_filename, header = TRUE, sep = "|", stringsAsFactors = FALSE, showProgress = TRUE, 
                     colClasses = c("character", "numeric", "Date", "character", "character", #1-5 (A-E)
 					               "numeric", "numeric", "numeric", "numeric", "numeric", #6-10 (F-J)
@@ -141,7 +142,9 @@ load_comet_sample <- function()
 								   "character", "character", "character", "character", "character", #86-90 (CH-CL)
 								   "character", "numeric", "character", "character", "numeric", #91-95 (CM-CQ)
 								   "character", "character", "character", "character", "character", #96-100 (CR-CV)
-								   "Date", "character", "character", "character", "character" #101-105 (CW-DA)
+								   "Date", "character", "character", 
+								   "character", #Added for COMPETR1_NM
+								   "character", "character" #101-106 (CW-DB)
 								   ), data.table = TRUE) #The last two "character" fields are added for STATE and region in reading sample
 }
 
@@ -162,13 +165,15 @@ prepare_for_disconnection <- function(comet_data)
   for_today[, data_disconnected := (DATA_DISCONNECT_DT != "")]
   for_today[, account_disconnected := as.numeric((ACCT_DISCONNECT_DT >= as.character(minus_180_date)) 
                                                   & (ACCT_DISCONNECT_DT <= as.character(Sys.Date())))]
+  for_today[, has_competitor := (COMPETR1_NM != "")]
   
   cols <- c("STATE", "region", "ACCT_SERVICE_TYPE", "VIDEO_CONTROLLABLE",  
             "MDU_FLAG", "VIDEO_NOT_CONTROLLABLE", "DATA_NOT_CONTROLLABLE", "DATA_CONTROLLABLE", 
 			"PromoOfferMix", "IONT_OFFER", "PromoOfferMix_Before", "CLLI8", 
 			"PUP_WR102621", "PUP_WR102596", 
 			"renewed", "video_disconnected", "data_disconnected", "account_disconnected",
-			"Upgarde_Video", "Upgrade_Data", "Downgrade_Video", "Downgrade_Data", "Cust_PBA_M30", "Cust_PBA_30")
+			"Upgarde_Video", "Upgrade_Data", "Downgrade_Video", "Downgrade_Data", "Cust_PBA_M30", "Cust_PBA_30",
+			"COMPETR1_NM", "has_competitor")
   for_today[,(cols) := lapply(.SD, as.factor), .SDcols = cols]
   for_today[ ,c("AcctSK", "TRACKER_DT", "RENEW_DATE", "AIO_OFFER_DT", 
                 "CRM_OFFER_DT", "VIDEO_DISCONNECT_DT", "DATA_DISCONNECT_DT",
@@ -216,7 +221,7 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
 					  "CSSC_CALLS_AFTER30", "VENDOR_CALLS_AFTER30", "CSSC_CALLS_BEFORE30", "VENDOR_CALLS_BEFORE30", 
 					  "CSSC_CALLS_BEFORE60", "VENDOR_CALLS_BEFORE60", "account_disconnected",
 					  "Upgarde_Video", "Upgrade_Data", "Downgrade_Video", "Downgrade_Data", "Cust_PBA_M30", "Cust_PBA_30",
-					  "PBA_M30_AMT", "PBA_30_AMT")
+					  "PBA_M30_AMT", "PBA_30_AMT", "COMPETR1_NM", "has_competitor")
   for_today <- for_today[, .SD, .SDcols = cols_to_retain]
   
   timestr <- as.character(Sys.time())
@@ -224,7 +229,7 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
   timestr <- gsub(" ", "_", timestr)
   timestr <- gsub(":", "_", timestr)
   cat(paste("timestr = ", timestr, "\n"))
-  opfile <- paste("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_2\\disconnection_results\\Tree_output_", timestr, ".txt", sep = "")
+  opfile <- paste("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\disconnection_results\\Tree_output_", timestr, ".txt", sep = "")
   cat(paste("opfile = ", opfile, "\n"))
   
   sink(file = opfile)
@@ -241,7 +246,7 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
 	formula_str <- paste("account_disconnected ~ ", paste(sampled_features, collapse = " + "), sep = "")
     #dtree <- rpart(as.formula(formula_str), data = for_today, minsplit = 2, minbucket = 1)
 	#CART is not creating any real splits, so we are using conditional inference tree here which is picking up regions nicely
-	dtree <- ctree(as.formula(formula_str), data = for_today)
+	dtree <- ctree(as.formula(formula_str), data = for_today, controls = ctree_control(minbucket = 1000))
 	#if (!is.null(dtree$splits))
 	#{
 	  #No point in printing decision trees with root node only
@@ -293,8 +298,8 @@ print_dtree <- function(dtree, thr_majority_size_in_node = 0.05, thr_majority = 
 }
 
 #comet_data <- load_comet_data()
-#comet_data <- load_comet_sample()
-#dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
+comet_data <- load_comet_sample()
+dtree <- el_yunque_sample_features_from_business_provided_features(comet_data)
 
 
 
