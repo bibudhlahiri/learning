@@ -1,6 +1,8 @@
 library(rpart)
 library(data.table)
 
+#The following method loads COMET extract from a local folder, defined by <filename>, and 
+#saves to local machine an output sample of a given size.
 load_comet_data <- function()
 {
   filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\COMET_DATA_2016_3.TXT"
@@ -29,17 +31,34 @@ load_comet_data <- function()
 								   "character", "Date", "character", "character", "character"     #101-104, last one for COMPETR1_NM
 								   ), 
                     data.table = TRUE)
+					
+  #Read the column names from the provided file Schema.txt. We do not need the variable types from there.
   lines <- readLines("C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\Schema.txt")
+  #Split the input lines from Schema.txt, so that column names and column types show up as different elements in a vector
+  #named from_schema_file
   from_schema_file <- unlist(strsplit(lines, " "))
+  #The vector from_schema_file needs to be "cleaned", to remove the data types, tabs and spaces. The function check_if_column_name()
+  #is called to check which entries in from_schema_file are valid values for column names.
   is_column_name <- unlist(lapply(from_schema_file, check_if_column_name))
+  #Just keep the valid column names.
   column_names <- from_schema_file[which(is_column_name == TRUE)]
   setnames(comet_data, names(comet_data), column_names)
   
+  #Update the MODEL_DECILE values so that all -1 (absent) values are replaced by 9.
   comet_data[, MODEL_DECILE := ifelse((MODEL_DECILE == -1), 9, MODEL_DECILE)]
+  
+  #We found an issue in the data that many wire centers correspond to more than one states. For such wire centers,
+  #through analyze_wire_centers() and update_states(), we are updating the states as follows: take the state which has
+  #maximum accounts with that wire center. Replace all other values of states by the majority state.
   wc_largest_state <- analyze_wire_centers(comet_data)
   comet_data <- update_states(comet_data)
+  
+  #We are creating "regions", an entity at a level of granularity between state and wire center. If a wire center has 
+  #5000 (configurable parameter) or more accounts, it forms a region by itself. For all other wire centers in the SAME 
+  #state, we put them in a single bucket, and name it as "<state_name>_Other".
   comet_data <- create_regions(comet_data)
   
+  #We create a sample of size 60,000, save it to disk, and use it for constructing multiple decision trees to make things faster.
   sample_size <- 60000
   sampled_comet_data <- comet_data[sample(nrow(comet_data), sample_size), ]
   sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\SAMPLED_COMET_DATA_2016.TXT"
@@ -47,6 +66,10 @@ load_comet_data <- function()
   comet_data
 }
 
+#The vector from_schema_file needs to be "cleaned", to remove the data types, tabs and spaces. The following function
+#is called to check which entries in from_schema_file are valid values for column names. It is written to work on one input 
+#string at a time. Sometimes the column names and types were separated by both space and tab, so we have a leading "\t" in the 
+#descriptions of some column types in this method, e.g., "\tBYTEINT".
 check_if_column_name <- function(input)
 {
   if ((input == "") || (substr(input, 1, nchar("VARCHAR")) == "VARCHAR") || (substr(input, 1, nchar("SMALLINT")) == "SMALLINT") ||
@@ -62,6 +85,8 @@ check_if_column_name <- function(input)
   return(TRUE)
 } 
 
+#This method returns wc_largest_state, a data.table with the name of the largest state (state with maximum number of accounts) 
+#for each wire center.
 analyze_wire_centers <- function(comet_data)
 {
   setkey(comet_data, STATE, CLLI8)
@@ -71,6 +96,10 @@ analyze_wire_centers <- function(comet_data)
   #and for all accounts in that wire center, update the state values to that state.
   setkey(by_state_wc, CLLI8, n_accounts)
   by_state_wc <- by_state_wc[order(CLLI8, -n_accounts)]
+  #At this point, by_state_wc will have all the states for a given wire center placed consecutively, and  
+  #ordered by the number of accounts that belong to that combination of state and wire center. For examle, if 
+  #RCPKNJ01PS0 has accounts in multiple states, but most accounts in NJ, then NJ will be at number 1, and so on.
+  #So, we are just taking the first state for each wire center in the next step.
   wc_largest_state <- by_state_wc[, .SD[1], by = CLLI8] #Back to 7498 states
   wc_largest_state <- wc_largest_state[, n_accounts := NULL]
 }
@@ -78,7 +107,8 @@ analyze_wire_centers <- function(comet_data)
 update_states <- function(comet_data)
 {
   wc_largest_state <- analyze_wire_centers(comet_data)
-  #Join comet_data and wc_largest_state by CLLI8
+  #Join comet_data and wc_largest_state by CLLI8 so that we have the largest state for a 
+  #given wire center in comet_data.
   names(wc_largest_state) <- c("CLLI8", "largest_state")
   setkey(wc_largest_state, CLLI8)
   setkey(comet_data, CLLI8)
@@ -117,6 +147,7 @@ create_regions <- function(comet_data, thr_wc = 5000)
   comet_data
 }
 
+#The following method just loads the sample from the local machine that was written in load_comet_data().
 load_comet_sample <- function()
 {
   sample_filename <- "C:\\Users\\blahiri\\Verizon\\COMET_DATA_2016_3\\SAMPLED_COMET_DATA_2016.TXT"
@@ -147,6 +178,9 @@ load_comet_sample <- function()
 								   ), data.table = TRUE) #The last two "character" fields are added for STATE and region in reading sample
 }
 
+#The following method takes the "base dataset" that we work on from the sample or the entire dataset, 
+#whichever is provided as the input argument comet_data. The base dataset is all the accounts which have a 
+#contract renewal date (TRACKER_DT) within last 180 days. 
 prepare_for_contract_renewal <- function(comet_data)
 {
   minus_180_date <- Sys.Date() - 180
@@ -155,7 +189,8 @@ prepare_for_contract_renewal <- function(comet_data)
   for_today <- comet_data[((TRACKER_DT >= as.character(minus_180_date)) & (TRACKER_DT <= as.character(Sys.Date()))),]
   cat(paste("nrow(for_today) = ", nrow(for_today), "\n", sep = ""))
   
-  #Before dropping dates, generate corresponding factor variables
+  #The date fields will be dropped because they are not to be used in modeling exercise. 
+  #But before dropping dates, generate corresponding factor variables
   for_today[, renewed := (RENEW_DATE != "")]
   for_today[, AIO_offered := (AIO_OFFER_DT != "")]
   for_today[, CRM_offered := (CRM_OFFER_DT != "")]
@@ -164,6 +199,7 @@ prepare_for_contract_renewal <- function(comet_data)
   for_today[, account_disconnected := (ACCT_DISCONNECT_DT != "")] #0.97% of for_today is account_disconnected
   for_today[, has_competitor := (COMPETR1_NM != "")]
   
+  #List the columns whose type should be "factor", i.e., the categorical variables
   cols <- c("STATE", "region", "ACCT_SERVICE_TYPE", "VIDEO_CONTROLLABLE",  
             "MDU_FLAG", "VIDEO_NOT_CONTROLLABLE", "DATA_NOT_CONTROLLABLE", "DATA_CONTROLLABLE", 
 			"PromoOfferMix", "IONT_OFFER", "PromoOfferMix_Before", "CLLI8", 
@@ -171,44 +207,18 @@ prepare_for_contract_renewal <- function(comet_data)
 			"renewed", "video_disconnected", "data_disconnected", "account_disconnected",
 			"Upgarde_Video", "Upgrade_Data", "Downgrade_Video", "Downgrade_Data", "Cust_PBA_M30", "Cust_PBA_30",
 			"COMPETR1_NM", "has_competitor")
+  #Use lapply() to set all of them to factor at once
   for_today[,(cols) := lapply(.SD, as.factor), .SDcols = cols]
+  #Dropping the date fields and AcctSK
   for_today[ ,c("AcctSK", "TRACKER_DT", "RENEW_DATE", "AIO_OFFER_DT", 
                 "CRM_OFFER_DT", "VIDEO_DISCONNECT_DT", "DATA_DISCONNECT_DT",
 				"ACCT_DISCONNECT_DT") := NULL]
   for_today
 }
 
-analyze_contract_renewal <- function(comet_data)
-{
-  for_today <- prepare_for_contract_renewal(comet_data)
-  #W/o any optimization, the decision tree on all 1,136,189 rows splits only based on AIO_OFFER_NAME. One group has 
-  #93.6% FALSE and 6.35% TRUE, and the other node has 96.6% TRUE and 3.3% FALSE. Together, these two nodes have 
-  #999318 + 136871 = 1,136,189 points. But one reason for this may be decision tree favors categorical variables with too many (274)
-  #distinct values: can we reduce the number of distinct values by grouping values together?
-  
-  #With the reduction in the number of distinct values for the categorical features, AIO_offered became the only feature used.
-  #93.67% of people who were not offered AIO did not renew, 96.6% of people who were offered AIO renewed.
-  for_today <- reduce_number_of_distinct_values(for_today)
-  dtree <- rpart(renewed ~ ., data = for_today)
-}
-
-analyze_factor_variables <- function(comet_data)
-{
-  for_today <- prepare_for_contract_renewal(comet_data)
-  columns <- names(for_today)
-  for (column in columns)
-  {
-    if (is.factor(for_today[, get(column)]))
-	{
-	  #CLLI8 has 7086 unique values, AIO_OFFER_NAME has 203, PromoOfferMix_Before has 35, PromoOfferMix has 34, ACCT_SERVICE_TYPE has 15,
-	  #BUNDLE_NAME has 30, NEW_BUNDLE_NAME has 30.
-	  cat(paste("column = ", column, ", no. of unique values = ", length(unique(for_today[, get(column)])), "\n", sep = ""))
-	}
-  }
-}
 
 #Since decision tree favors categorical variables with too many distinct values, reduce the number of 
-#distinct values of such variables by merging the categories after top (k-1).
+#distinct values of such variables (except STATE and region) by merging the categories after top (k-1).
 reduce_number_of_distinct_values <- function(for_today)
 {
   k <- 5
@@ -235,11 +245,13 @@ reduce_number_of_distinct_values <- function(for_today)
   for_today
 }
 
+#The following is the core method that creates T decision trees, each with (F + 2) features, where the 
+#F features are sampled at random from the featurset mentioned as "cols_to_retain".
 el_yunque_sample_features_from_business_provided_features <- function(comet_data, F = 5, T = 50)
 {
   for_today <- prepare_for_contract_renewal(comet_data)
   for_today <- reduce_number_of_distinct_values(for_today)
-  #print(table(for_today[, COMPETR1_NM]))
+  #The following features were provided as input by the business users: business wants to see how these impact renewal/non-renewal
   cols_to_retain <- c("MODEL_DECILE", "MDU_FLAG", "STATE", "region", #Replacing CLLI8 by region 
                       "PUP_WR102621", "PUP_WR102596", "PromoOfferMix", "PromoAmt", "PromoOfferMix_Before", "PromoAmt_Before", 
 					  "CSSC_CALLS_AFTER30", "VENDOR_CALLS_AFTER30", "CSSC_CALLS_BEFORE30", "VENDOR_CALLS_BEFORE30", 
@@ -248,6 +260,7 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
 					  "PBA_M30_AMT", "PBA_30_AMT", "COMPETR1_NM", "has_competitor")
   for_today <- for_today[, .SD, .SDcols = cols_to_retain]
   
+  #Save the output trees in a file named by the timestamp at which it is generated, so that multiple runs do not overwrite results
   timestr <- as.character(Sys.time())
   timestr <- gsub("-", "_", timestr)
   timestr <- gsub(" ", "_", timestr)
@@ -279,6 +292,8 @@ el_yunque_sample_features_from_business_provided_features <- function(comet_data
   dtree
 }
 
+#The following method is a quick way to generate the path to a node 
+#in the decision tree from root
 get_path_to_node <- function(node_id)
 {
   j <- node_id
