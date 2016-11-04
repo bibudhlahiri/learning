@@ -47,10 +47,10 @@ analyze_by_portion <- function(primer_defects)
   
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\primer_defects_by_portion.png"
   png(image_file,  width = 1200, height = 960, units = "px")
-  p <- ggplot(by_portion[1:10,], aes(x = factor(PORTION), y = percentage)) + geom_bar(stat = "identity") + xlab("Portion") + 
-       ylab("Percentage of defects") + 
-       theme(axis.text = element_text(colour = 'blue', size = 14, face = 'bold')) +
-         theme(axis.title = element_text(colour = 'red', size = 14, face = 'bold')) + 
+  p <- ggplot(by_portion[1:10,], aes(x = factor(PORTION), y = n_defects)) + geom_bar(stat = "identity") + xlab("Portion") + 
+       ylab("Number of primer defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
          theme(axis.text.x = element_text(angle = 90))
   print(p)
   dev.off()
@@ -73,10 +73,10 @@ analyze_by_item <- function(primer_defects)
   
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\primer_defects_by_item.png"
   png(image_file,  width = 1200, height = 960, units = "px")
-  p <- ggplot(by_item[1:10,], aes(x = factor(ITEM), y = percentage)) + geom_bar(stat = "identity") + xlab("Item") + 
-       ylab("Percentage of defects") + 
-       theme(axis.text = element_text(colour = 'blue', size = 14, face = 'bold')) +
-         theme(axis.title = element_text(colour = 'red', size = 14, face = 'bold')) + 
+  p <- ggplot(by_item[1:10,], aes(x = factor(ITEM), y = n_defects)) + geom_bar(stat = "identity") + xlab("Item") + 
+       ylab("Number of primer defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
          theme(axis.text.x = element_text(angle = 90))
   print(p)
   dev.off()
@@ -99,10 +99,10 @@ analyze_by_page <- function(primer_defects)
   
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\primer_defects_by_page.png"
   png(image_file,  width = 1200, height = 960, units = "px")
-  p <- ggplot(by_page[1:10,], aes(x = factor(PAGE), y = percentage)) + geom_bar(stat = "identity") + xlab("Page") + 
-       ylab("Percentage of defects") + 
-       theme(axis.text = element_text(colour = 'blue', size = 14, face = 'bold')) +
-         theme(axis.title = element_text(colour = 'red', size = 14, face = 'bold')) + 
+  p <- ggplot(by_page[1:10,], aes(x = factor(PAGE), y = n_defects)) + geom_bar(stat = "identity") + xlab("Page") + 
+       ylab("Number of primer defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
          theme(axis.text.x = element_text(angle = 90))
   print(p)
   dev.off()
@@ -125,15 +125,42 @@ analyze_by_terminal <- function(primer_defects)
   
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\primer_defects_by_terminal.png"
   png(image_file,  width = 1200, height = 960, units = "px")
-  p <- ggplot(by_terminal[1:10,], aes(x = factor(TERMINAL), y = percentage)) + geom_bar(stat = "identity") + xlab("Terminal") + 
-       ylab("Percentage of defects") + 
-       theme(axis.text = element_text(colour = 'blue', size = 14, face = 'bold')) +
-         theme(axis.title = element_text(colour = 'red', size = 14, face = 'bold')) + 
+  p <- ggplot(by_terminal[1:10,], aes(x = factor(TERMINAL), y = n_defects)) + geom_bar(stat = "identity") + xlab("Terminal") + 
+       ylab("Number of primer defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
          theme(axis.text.x = element_text(angle = 90))
   print(p)
   dev.off()
   
   by_terminal
+}
+
+#Are SAG PRIMER and PRIMER SAG same?
+analyze_by_discrepancy <- function(primer_defects)
+{
+  setkey(primer_defects, DISCREPANCY)
+  by_discrepancy <- primer_defects[, list(n_defects = length(DEFECT_ID)), by = DISCREPANCY]
+  setkey(by_discrepancy, n_defects)
+  by_discrepancy <- by_discrepancy[order(-n_defects)]
+  total_defects <- nrow(primer_defects)
+  by_discrepancy[, percentage := 100*n_defects/total_defects]
+  by_discrepancy$DISCREPANCY <- factor(by_discrepancy$DISCREPANCY, 
+                              levels = by_discrepancy$DISCREPANCY,
+                              ordered = TRUE)
+  print(by_discrepancy[1:10,])
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\primer_defects_by_discrepancy.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(by_discrepancy[1:10,], aes(x = factor(DISCREPANCY), y = n_defects)) + geom_bar(stat = "identity") + xlab("Terminal") + 
+       ylab("Number of primer defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
+         theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  dev.off()
+  
+  by_discrepancy
 }
 
 analyze_by_creation_date <- function(primer_defects)
@@ -156,14 +183,41 @@ analyze_by_creation_date <- function(primer_defects)
 }
 
 
+analyze_by_day_of_week <- function(primer_defects)
+{
+  setkey(primer_defects, CREATION_TIME)
+  primer_defects[, day_of_week := weekdays(as.Date(primer_defects$CREATION_TIME, "%d-%b-%y"))]
+  
+  setkey(primer_defects, day_of_week)
+  by_day_of_week <- primer_defects[, list(n_defects = length(DEFECT_ID)), by = day_of_week]
+  setkey(by_day_of_week, n_defects)
+  by_day_of_week <- by_day_of_week[order(-n_defects)]
+  by_day_of_week$day_of_week <- factor(by_day_of_week$day_of_week, 
+                              levels = by_day_of_week$day_of_week,
+                              ordered = TRUE)
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\defects_by_day_of_week.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(by_day_of_week, aes(x = factor(day_of_week), y = n_defects)) + geom_bar(stat = "identity") + xlab("Day of Week") + 
+       ylab("Number of primer defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
+         theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  aux <- dev.off()
+  by_day_of_week
+}
+
+
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ics_defect_analysis.R")
 primer_defects <- load_ics_data()
-by_portion <- analyze_by_portion(primer_defects)
+#by_portion <- analyze_by_portion(primer_defects)
 #by_item <- analyze_by_item(primer_defects)
 #by_page <- analyze_by_page(primer_defects)
 #by_terminal <- analyze_by_terminal(primer_defects)
 #by_creation_time <- analyze_by_creation_date(primer_defects)
-
+#by_discrepancy <- analyze_by_discrepancy(primer_defects)
+by_day_of_week <- analyze_by_day_of_week(primer_defects)
 
 
 
