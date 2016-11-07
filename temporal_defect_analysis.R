@@ -80,19 +80,26 @@ dpv_from_dart_galc <- function(tblBodyDefects)
   defects_by_manuf_date
 }
 
-analyze_by_shift <- function(tblBodyDefects)
+analyze_defects_by_time_of_day <- function(tblBodyDefects, shift_length = 8)
 {
-  tblBodyDefects[, defect_time_only := strftime(strptime(tblBodyDefects$DefectTime, "%Y-%m-%d %H:%M:%S"), "%H:%M:%S")]
-  tblBodyDefects[, shift := apply(tblBodyDefects, 1, function(row) get_shift(as.character(row["defect_time_only"])))]
+  #difftime expects date-time objects
+  tblBodyDefects[, seconds_from_start_of_day := as.numeric(difftime(strptime(DefectTime, "%Y-%m-%d %H:%M:%S"), 
+                                                                    strptime(paste(substr(DefectTime, 1, 10), "00:00:00"), "%Y-%m-%d %H:%M:%S"), 
+																	units = "secs"))]
+  tblBodyDefects[, shift_number := seconds_from_start_of_day%/%(shift_length*60*60) + 1]
   
-  setkey(tblBodyDefects, shift)
-  by_shift <- tblBodyDefects[, list(n_defects = length(BodyDefectID)), by = shift] 
+  setkey(tblBodyDefects, shift_number)
+  by_shift <- tblBodyDefects[, list(n_defects = length(BodyDefectID)), by = shift_number] 
   by_shift <- by_shift[order(-n_defects)]
-  by_shift$shift <- factor(by_shift$shift, levels = by_shift$shift, ordered = TRUE)
+  by_shift[, shift_start_time := (by_shift$shift_number - 1)*shift_length]
+  by_shift[, shift_end_time := by_shift$shift_start_time + shift_length]
+  by_shift[, shift_time := paste(by_shift$shift_start_time, ":00-", by_shift$shift_end_time, ":00", sep = "")]
+  by_shift$shift_time <- factor(by_shift$shift_time, levels = by_shift$shift_time, ordered = TRUE)
   
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\defects_by_shift.png"
+  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\defects_by_time_of_day_", 
+                      "bucket_size_", shift_length, "_hrs.png", sep = "")
   png(image_file, width = 600, height = 480, units = "px")
-  p <- ggplot(by_shift, aes(x = factor(shift), y = n_defects)) + geom_bar(stat = "identity") + xlab("Shift") + 
+  p <- ggplot(by_shift, aes(x = factor(shift_time), y = n_defects)) + geom_bar(stat = "identity") + xlab("Time of day") + 
        ylab("Number of defects") + 
        theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
          theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
@@ -100,22 +107,13 @@ analyze_by_shift <- function(tblBodyDefects)
   print(p)
   dev.off()
   
-  tblBodyDefects
-}
-
-get_shift <- function(defect_time_only)
-{
-  if ((defect_time_only >= "00:00:00") & (defect_time_only < "07:59:59"))    
-    return("Early_Morning")
-  if ((defect_time_only >= "08:00:00") & (defect_time_only < "15:59:59"))    
-    return("Day")
-  return("Evening")
+  by_shift
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\temporal_defect_analysis.R")
-tblBodyDefects <- load_dart_data()
+tblBodyDefects <- load_dart_data() #2496743 defects, matches exactly with powerpoint based on DART
 #defects_by_manuf_date <- dpv_from_dart_galc(tblBodyDefects) 
-tblBodyDefects <- analyze_by_shift(tblBodyDefects)
+by_shift <- analyze_defects_by_time_of_day(tblBodyDefects, 8)
 
 
 
