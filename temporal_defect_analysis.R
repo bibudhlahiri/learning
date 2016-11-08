@@ -60,8 +60,12 @@ dpv_from_dart_galc <- function(tblBodyDefects, galc)
   #Generate a daily plot first with number of defects
   tblBodyDefects[, manuf_date := substr(tblBodyDefects$BoothTime, 1, 10)]
   setkey(tblBodyDefects, manuf_date)
-  defects_by_manuf_date <- tblBodyDefects[, list(n_defects = length(BodyDefectID)), by = manuf_date]
-  
+  defects_by_manuf_date <- tblBodyDefects[, list(n_total_defects = length(BodyDefectID),
+                                                 n_primer_defects = sum(as.numeric(PaintSystemID == 7)),
+												 n_base_defects = sum(as.numeric(PaintSystemID == 8)),
+												 n_other_defects = sum(as.numeric(!(PaintSystemID %in% c(7,8))))), 
+												 by = manuf_date]  
+  #On average, about 55% DPVs come from primer, 40% from base and 5% from other.
   #Get the number of Lexus vehicles manufactured each day to compute DPV  
   setkey(galc, manuf_date)
   vehicles_by_manuf_date <- galc[, list(n_vehicles = length(VIN_NO)), by = manuf_date]
@@ -70,22 +74,42 @@ dpv_from_dart_galc <- function(tblBodyDefects, galc)
   setkey(vehicles_by_manuf_date, manuf_date)
   setkey(defects_by_manuf_date, manuf_date)
   defects_by_manuf_date <- defects_by_manuf_date[vehicles_by_manuf_date, nomatch = 0]
-  defects_by_manuf_date[, DPV := n_defects/n_vehicles] 
+  defects_by_manuf_date[, total_DPV := n_total_defects/n_vehicles] 
+  defects_by_manuf_date[, primer_DPV := n_primer_defects/n_vehicles] 
+  defects_by_manuf_date[, base_DPV := n_base_defects/n_vehicles]
+  defects_by_manuf_date[, other_DPV := n_other_defects/n_vehicles]
+  defects_by_manuf_date[, c("n_total_defects", "n_primer_defects", "n_base_defects", "n_other_defects", "n_vehicles") := NULL]
+  
   #fivenum(defects_by_manuf_date$DPV) 5.254902   54.954248   67.592593   77.905882 2157.000000
   #mean(defects_by_manuf_date$DPV) 85.10539
   #Leo found "average" as 79.42 (between our median and mean) using A0_CDATE in GALC and filtering DART for Lexus defects
+  #cor(defects_by_manuf_date$total_DPV, defects_by_manuf_date$primer_DPV) 0.9724779
+  #cor(defects_by_manuf_date$total_DPV, defects_by_manuf_date$base_DPV) 0.9686794
+  #cor(defects_by_manuf_date$total_DPV, defects_by_manuf_date$other_DPV) 0.9066242
+  #cor(defects_by_manuf_date$primer_DPV, defects_by_manuf_date$base_DPV) 0.9454616
+  
   dpv_filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\DPV.csv"
   write.table(defects_by_manuf_date, dpv_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
   
+  defect_data_long <- melt(defects_by_manuf_date, id = "manuf_date")
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\DPV.png"
   png(image_file, width = 1200, height = 400)
-  defects_by_manuf_date[, manuf_date := as.Date(defects_by_manuf_date$manuf_date, "%Y-%m-%d")]
-  #defects_by_manuf_date <- defects_by_manuf_date[(DPV <= 500),]
-  p <- ggplot(defects_by_manuf_date, aes(manuf_date, DPV)) + geom_line() + scale_x_date(date_labels = "%b-%Y") + xlab("Time") + ylab("Daily DPVs")
+  defect_data_long[, manuf_date := as.Date(defect_data_long$manuf_date, "%Y-%m-%d")]
+  p <- ggplot(defect_data_long, aes(x = manuf_date, y = value, colour=variable)) + geom_line() + scale_x_date(date_labels = "%b-%Y") + xlab("Time") + ylab("Daily DPVs by type of defect")
   print(p)
   aux <- dev.off()
   
-  defects_by_manuf_date
+  #Correlations among different types of DPVs are same even after removing high spikes
+  truncated_defect_data <- defects_by_manuf_date[(total_DPV <= 500),]
+  truncated_data_long <- melt(truncated_defect_data, id = "manuf_date")
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\DPV_truncated.png"
+  png(image_file, width = 1200, height = 400)
+  truncated_data_long[, manuf_date := as.Date(truncated_data_long$manuf_date, "%Y-%m-%d")]
+  p <- ggplot(truncated_data_long, aes(x = manuf_date, y = value, colour=variable)) + geom_line() + scale_x_date(date_labels = "%b-%Y") + xlab("Time") + ylab("Daily DPVs by type of defect")
+  print(p)
+  aux <- dev.off()
+  
+  truncated_defect_data
 }
 
 analyze_defects_by_time_of_day <- function(tblBodyDefects, shift_length = 8)
@@ -119,9 +143,10 @@ analyze_defects_by_time_of_day <- function(tblBodyDefects, shift_length = 8)
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\temporal_defect_analysis.R")
-tblBodyDefects <- load_dart_data() #2496743 defects, matches exactly with powerpoint based on DART
+tblBodyDefects <- load_dart_data() #2496743 defects, matches exactly with powerpoint based on DART. 1,377,300 defects for PaintSystemID == 7 (primer),
+#whereas ppt says 1,288,568. 130,400 defects for PaintSystemID == 8 (Base), matches with ppt; 989,043 defects for PaintSystemID == 6 (Body Paint Lexus).
 galc <- load_galc_data()
-defects_by_manuf_date <- dpv_from_dart_galc(tblBodyDefects, galc) 
+truncated_defect_data <- dpv_from_dart_galc(tblBodyDefects, galc) 
 #by_shift <- analyze_defects_by_time_of_day(tblBodyDefects, 8)
 
 
