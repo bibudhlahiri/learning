@@ -36,15 +36,10 @@ load_dart_data <- function()
   tblBodyDefects <- tblBodyDefects[(PaintSystemID %in% 5:9),]
 }
   
-dpv_from_dart_galc <- function(tblBodyDefects)
+load_galc_data <- function()
 {
-  #Generate a daily plot first with number of defects
-  tblBodyDefects[, manuf_date := substr(tblBodyDefects$BoothTime, 1, 10)]
-  setkey(tblBodyDefects, manuf_date)
-  defects_by_manuf_date <- tblBodyDefects[, list(n_defects = length(BodyDefectID)), by = manuf_date]
-  
-  #Get the number of Lexus vehicles manufactured each day to compute DPV
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\GALC\\GALC-DW-TMMK-Lexus-sinceNov2015\\Lexus_Data.csv"
+  #Each VEHICLE_ID appears only once in GALC. Same applies for each VIN_NO.
   galc <- fread(filename, header = TRUE, sep = ",", stringsAsFactors = FALSE, showProgress = TRUE, 
                     colClasses = c("character", "numeric", "numeric", "numeric", "numeric", #A-E
 					               "character", "character", "Date", "character", "character", #F-J
@@ -55,9 +50,19 @@ dpv_from_dart_galc <- function(tblBodyDefects)
 								   "Date", "Date", "Date", "Date", "Date", #AE-AI
 								   "Date", "Date", "Date", "Date", "Date", #AJ-AN
 								   "Date", "Date", "Date", "character" #AO-AR
-								   ), data.table = TRUE)
+								   ), data.table = TRUE) #38,545 rows
   galc[, manuf_date := strftime(strptime(galc$A0_CDATE, "%m-%d-%y"), "%Y-%m-%d")]
+  galc
+}
+
+dpv_from_dart_galc <- function(tblBodyDefects, galc)
+{
+  #Generate a daily plot first with number of defects
+  tblBodyDefects[, manuf_date := substr(tblBodyDefects$BoothTime, 1, 10)]
+  setkey(tblBodyDefects, manuf_date)
+  defects_by_manuf_date <- tblBodyDefects[, list(n_defects = length(BodyDefectID)), by = manuf_date]
   
+  #Get the number of Lexus vehicles manufactured each day to compute DPV  
   setkey(galc, manuf_date)
   vehicles_by_manuf_date <- galc[, list(n_vehicles = length(VIN_NO)), by = manuf_date]
   
@@ -65,15 +70,18 @@ dpv_from_dart_galc <- function(tblBodyDefects)
   setkey(vehicles_by_manuf_date, manuf_date)
   setkey(defects_by_manuf_date, manuf_date)
   defects_by_manuf_date <- defects_by_manuf_date[vehicles_by_manuf_date, nomatch = 0]
-  defects_by_manuf_date[, DPV := n_defects/n_vehicles]
+  defects_by_manuf_date[, DPV := n_defects/n_vehicles] 
+  #fivenum(defects_by_manuf_date$DPV) 5.254902   54.954248   67.592593   77.905882 2157.000000
+  #mean(defects_by_manuf_date$DPV) 85.10539
+  #Leo found "average" as 79.42 (between our median and mean) using A0_CDATE in GALC and filtering DART for Lexus defects
   dpv_filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\DPV.csv"
   write.table(defects_by_manuf_date, dpv_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
   
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DPV.png"
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\DPV.png"
   png(image_file, width = 1200, height = 400)
   defects_by_manuf_date[, manuf_date := as.Date(defects_by_manuf_date$manuf_date, "%Y-%m-%d")]
-  defects_by_manuf_date <- defects_by_manuf_date[(DPV <= 500),]
-  p <- ggplot(defects_by_manuf_date, aes(manuf_date, DPV)) + geom_line() + scale_x_date(date_labels = "%b-%Y") + xlab("") + ylab("Daily DPVs")
+  #defects_by_manuf_date <- defects_by_manuf_date[(DPV <= 500),]
+  p <- ggplot(defects_by_manuf_date, aes(manuf_date, DPV)) + geom_line() + scale_x_date(date_labels = "%b-%Y") + xlab("Time") + ylab("Daily DPVs")
   print(p)
   aux <- dev.off()
   
@@ -112,8 +120,9 @@ analyze_defects_by_time_of_day <- function(tblBodyDefects, shift_length = 8)
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\temporal_defect_analysis.R")
 tblBodyDefects <- load_dart_data() #2496743 defects, matches exactly with powerpoint based on DART
-#defects_by_manuf_date <- dpv_from_dart_galc(tblBodyDefects) 
-by_shift <- analyze_defects_by_time_of_day(tblBodyDefects, 8)
+galc <- load_galc_data()
+defects_by_manuf_date <- dpv_from_dart_galc(tblBodyDefects, galc) 
+#by_shift <- analyze_defects_by_time_of_day(tblBodyDefects, 8)
 
 
 
