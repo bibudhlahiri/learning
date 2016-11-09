@@ -52,6 +52,7 @@ load_galc_data <- function()
 								   "Date", "Date", "Date", "character" #AO-AR
 								   ), data.table = TRUE) #38,545 rows
   galc[, manuf_date := strftime(strptime(galc$A0_CDATE, "%m-%d-%y"), "%Y-%m-%d")]
+  #For Lexus, GALC data should be filtered on attribute KATASHIKI with value GSV60L-CETGKA. But currently all values are that only.
   galc
 }
 
@@ -65,7 +66,7 @@ dpv_from_dart_galc <- function(tblBodyDefects, galc)
 												 n_base_defects = sum(as.numeric(PaintSystemID == 8)),
 												 n_other_defects = sum(as.numeric(!(PaintSystemID %in% c(7,8))))), 
 												 by = manuf_date]  
-  #On average, about 55% DPVs come from primer, 40% from base and 5% from other.
+  #On average, about 55% DPVs come from primer, 5% from base and 40% from other.
   #Get the number of Lexus vehicles manufactured each day to compute DPV  
   setkey(galc, manuf_date)
   vehicles_by_manuf_date <- galc[, list(n_vehicles = length(VIN_NO)), by = manuf_date]
@@ -78,6 +79,8 @@ dpv_from_dart_galc <- function(tblBodyDefects, galc)
   defects_by_manuf_date[, primer_DPV := n_primer_defects/n_vehicles] 
   defects_by_manuf_date[, base_DPV := n_base_defects/n_vehicles]
   defects_by_manuf_date[, other_DPV := n_other_defects/n_vehicles]
+  dpv_filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\DPV.csv"
+  write.table(defects_by_manuf_date, dpv_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
   defects_by_manuf_date[, c("n_total_defects", "n_primer_defects", "n_base_defects", "n_other_defects", "n_vehicles") := NULL]
   
   #fivenum(defects_by_manuf_date$DPV) 5.254902   54.954248   67.592593   77.905882 2157.000000
@@ -87,9 +90,6 @@ dpv_from_dart_galc <- function(tblBodyDefects, galc)
   #cor(defects_by_manuf_date$total_DPV, defects_by_manuf_date$base_DPV) 0.9686794
   #cor(defects_by_manuf_date$total_DPV, defects_by_manuf_date$other_DPV) 0.9066242
   #cor(defects_by_manuf_date$primer_DPV, defects_by_manuf_date$base_DPV) 0.9454616
-  
-  dpv_filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\DPV.csv"
-  write.table(defects_by_manuf_date, dpv_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
   
   defect_data_long <- melt(defects_by_manuf_date, id = "manuf_date")
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\DPV.png"
@@ -108,8 +108,157 @@ dpv_from_dart_galc <- function(tblBodyDefects, galc)
   p <- ggplot(truncated_data_long, aes(x = manuf_date, y = value, colour=variable)) + geom_line() + scale_x_date(date_labels = "%b-%Y") + xlab("Time") + ylab("Daily DPVs by type of defect")
   print(p)
   aux <- dev.off()
+  #fivenum(truncated_defect_data$total_DPV) 5.254902  54.701657  67.242519  77.269841 216.833333
+  #mean(truncated_defect_data$total_DPV) 69.7438
+  #fraction <- truncated_defect_data$primer_DPV/truncated_defect_data$total_DPV; median(fraction) 0.549580
+  #fraction <- truncated_defect_data$base_DPV/truncated_defect_data$total_DPV; median(fraction) 0.05524215
+  #fraction <- truncated_defect_data$other_DPV/truncated_defect_data$total_DPV; median(fraction) 0.3938221
   
   truncated_defect_data
+}
+
+#Dig deeper into primer colors for primer-related defects. White primer DPVs have definitely increased with time.
+analyze_primer_dpv_by_primer_colors <- function(tblBodyDefects, galc)
+{
+  #Take primer defects from the set of all Lexus defects
+  setkey(tblBodyDefects, PaintSystemID)
+  primer_defects <- tblBodyDefects[(PaintSystemID == 7),] 
+  
+  #Get the primer color names
+  setkey(primer_defects, ColorID)
+  filename <- 
+  "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\DART\\DART-Source-TMMK-ALL(9-paint-defect-tables)\\DART\\tblColors.txt"
+  tblColors <- fread(filename, header = TRUE, sep = "\t", stringsAsFactors = FALSE, showProgress = TRUE, 
+                    colClasses = c("numeric", "character", "character", "character"), data.table = TRUE)
+  setkey(primer_defects, ColorID)
+  primer_defects <- primer_defects[tblColors, nomatch = 0]
+  
+  setkey(primer_defects, manuf_date)
+  primer_defects_by_manuf_date <- primer_defects[, list(n_primer_defects = length(BodyDefectID),
+                                                 n_dark_teal = sum(as.numeric(Description == "Dark Teal")),
+												 n_light_gray_primer = sum(as.numeric(Description == "Light Gray Primer")),
+												 n_dark_gray_primer = sum(as.numeric(Description == "Dark Gray Primer")),
+                                                 n_white_primer = sum(as.numeric(Description == "White Primer"))),											 
+												 by = manuf_date] 
+
+  #Get the number of Lexus vehicles manufactured each day to compute DPV  
+  setkey(galc, manuf_date)
+  vehicles_by_manuf_date <- galc[, list(n_vehicles = length(VIN_NO)), by = manuf_date]		
+  primer_defects_by_manuf_date <- primer_defects_by_manuf_date[vehicles_by_manuf_date, nomatch = 0]  
+  
+  primer_defects_by_manuf_date[, primer_DPV := n_primer_defects/n_vehicles] 
+  primer_defects_by_manuf_date[, dark_teal_DPV := n_dark_teal/n_vehicles]
+  primer_defects_by_manuf_date[, light_gray_primer_DPV := n_light_gray_primer/n_vehicles]
+  primer_defects_by_manuf_date[, dark_gray_primer_DPV := n_dark_gray_primer/n_vehicles]
+  primer_defects_by_manuf_date[, white_primer_DPV := n_white_primer/n_vehicles]
+  
+  #Since we are doing this for all data (not for spikes only), the following line would be required for removing outliers
+  primer_defects_by_manuf_date <- primer_defects_by_manuf_date[(primer_DPV <= 250),]
+  
+  primer_defects_by_manuf_date[, c("n_primer_defects", "n_dark_teal", "n_light_gray_primer", "n_dark_gray_primer", "n_white_primer", "n_vehicles") := NULL]
+  
+  primer_defects_by_manuf_date_long <- melt(primer_defects_by_manuf_date, id = "manuf_date")
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\primer_colors.png"
+  png(image_file, width = 1200, height = 400)
+  primer_defects_by_manuf_date_long[, manuf_date := as.Date(primer_defects_by_manuf_date_long$manuf_date, "%Y-%m-%d")]
+  p <- ggplot(primer_defects_by_manuf_date_long, aes(x = manuf_date, y = value, colour=variable)) + geom_line() + scale_x_date(date_labels = "%b-%Y") + xlab("Time") + ylab("Daily primer DPVs by primer color")
+  print(p)
+  aux <- dev.off()
+  
+  primer_defects_by_manuf_date
+}
+
+
+#Dig deeper into primer colors for primer-related defects to see what happened ONLY on the days with SPIKES 
+analyze_spikes_by_primer_colors <- function(tblBodyDefects, galc, percentile = 0.9)
+{
+  dpv_filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\DPV.csv"
+  defects_by_manuf_date <- fread(dpv_filename, header = TRUE, sep = ",", stringsAsFactors = FALSE, showProgress = TRUE, 
+                    colClasses = c("Date", "numeric", "numeric", "numeric", "numeric", 
+					               "numeric", "numeric", "numeric", "numeric", "numeric"
+								   ), data.table = TRUE)
+  truncated_defect_data <- defects_by_manuf_date[(total_DPV <= 500),]
+  #Let us define the threshold on primer DPV only as we see it in this plot itself.
+  threshold <- as.numeric(quantile(truncated_defect_data$primer_DPV, percentile))
+  spikes <- truncated_defect_data[(primer_DPV >= threshold),]
+  sentence <- paste("percentile = ", percentile, ", threshold = ", threshold, ", no. of spike days = ", nrow(spikes), sep = "")
+  cat(paste("With ", sentence, "\n", sep = ""))
+  
+  #Take primer defects from the set of all Lexus defects
+  setkey(tblBodyDefects, PaintSystemID)
+  primer_defects <- tblBodyDefects[(PaintSystemID == 7),] 
+  
+  #Take the primer defects only for the dates when spikes happened
+  setkey(primer_defects, manuf_date)
+  primer_defects <- primer_defects[(manuf_date %in% spikes$manuf_date),] 
+  
+  #Get the primer color names
+  setkey(primer_defects, ColorID)
+  filename <- 
+  "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\DART\\DART-Source-TMMK-ALL(9-paint-defect-tables)\\DART\\tblColors.txt"
+  tblColors <- fread(filename, header = TRUE, sep = "\t", stringsAsFactors = FALSE, showProgress = TRUE, 
+                    colClasses = c("numeric", "character", "character", "character"), data.table = TRUE)
+  setkey(primer_defects, ColorID)
+  primer_defects <- primer_defects[tblColors, nomatch = 0]
+  
+  setkey(primer_defects, manuf_date)
+  primer_defects_by_manuf_date <- primer_defects[, list(n_primer_defects = length(BodyDefectID),
+                                                 n_dark_teal = sum(as.numeric(Description == "Dark Teal")),
+												 n_light_gray_primer = sum(as.numeric(Description == "Light Gray Primer")),
+												 n_dark_gray_primer = sum(as.numeric(Description == "Dark Gray Primer")),
+                                                 n_white_primer = sum(as.numeric(Description == "White Primer"))),											 
+												 by = manuf_date] 
+
+  #Get the number of Lexus vehicles manufactured each day to compute DPV  
+  setkey(galc, manuf_date)
+  vehicles_by_manuf_date <- galc[, list(n_vehicles = length(VIN_NO)), by = manuf_date]		
+  primer_defects_by_manuf_date <- primer_defects_by_manuf_date[vehicles_by_manuf_date, nomatch = 0]  
+  
+  primer_defects_by_manuf_date[, primer_DPV := n_primer_defects/n_vehicles] 
+  primer_defects_by_manuf_date[, dark_teal_DPV := n_dark_teal/n_vehicles]
+  primer_defects_by_manuf_date[, light_gray_primer_DPV := n_light_gray_primer/n_vehicles]
+  primer_defects_by_manuf_date[, dark_gray_primer_DPV := n_dark_gray_primer/n_vehicles]
+  primer_defects_by_manuf_date[, white_primer_DPV := n_white_primer/n_vehicles]
+  
+  primer_defects_by_manuf_date[, c("n_primer_defects", "n_dark_teal", "n_light_gray_primer", "n_dark_gray_primer", "n_white_primer", "n_vehicles") := NULL]
+  
+  primer_defects_by_manuf_date_long <- melt(primer_defects_by_manuf_date, id = "manuf_date")
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\primer_colors_on_spike_days.png"
+  png(image_file, width = 1200, height = 400)
+  primer_defects_by_manuf_date_long[, manuf_date := as.Date(primer_defects_by_manuf_date_long$manuf_date, "%Y-%m-%d")]
+  p <- ggplot(primer_defects_by_manuf_date_long, aes(x = manuf_date, y = value, colour=variable)) + 
+       geom_point() + geom_line() + ggtitle(sentence) + scale_x_date(date_labels = "%b-%Y") + 
+	   xlab("Time") + ylab("Daily primer DPVs by primer color (on spike days)")
+  print(p)
+  aux <- dev.off()
+  
+  primer_defects_by_manuf_date
+}
+
+trend_in_white_primer <- function(tblBodyDefects, galc)
+{
+  primer_defects_by_manuf_date <- analyze_primer_dpv_by_primer_colors(tblBodyDefects, galc)
+  
+  #Do a time-series plot first
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\time_series_white_primer.png"
+  png(image_file, width = 1200, height = 400)
+  primer_defects_by_manuf_date[, manuf_date := as.Date(primer_defects_by_manuf_date$manuf_date, "%Y-%m-%d")]
+  p <- ggplot(primer_defects_by_manuf_date, aes(x = manuf_date, y = white_primer_DPV)) + geom_line() + 
+        scale_x_date(date_labels = "%b-%Y") + xlab("Time") + ylab("Daily white primer DPVs")
+  print(p)
+  aux <- dev.off()
+  
+  #Do a linear interpolation plot
+  primer_defects_by_manuf_date[, days_since_first_date := as.numeric(difftime(strptime(manuf_date, "%Y-%m-%d"), strptime("2015-11-11", "%Y-%m-%d"), units = "days"))]
+  lm_white_primer <- lm(white_primer_DPV ~ days_since_first_date, data = primer_defects_by_manuf_date)
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\linear_model_white_primer.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(primer_defects_by_manuf_date, aes(days_since_first_date, white_primer_DPV)) + geom_point() + geom_smooth(method = "lm") + 
+       xlab("Days since first date") + ylab("White primer DPVs") + 
+       theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
+  print(p)
+  dev.off()
 }
 
 analyze_defects_by_time_of_day <- function(tblBodyDefects, shift_length = 8)
@@ -148,6 +297,11 @@ tblBodyDefects <- load_dart_data() #2496743 defects, matches exactly with powerp
 galc <- load_galc_data()
 truncated_defect_data <- dpv_from_dart_galc(tblBodyDefects, galc) 
 #by_shift <- analyze_defects_by_time_of_day(tblBodyDefects, 8)
+#primer_defects_by_manuf_date <- analyze_primer_dpv_by_primer_colors(tblBodyDefects, galc)
+#primer_defects_by_manuf_date <- analyze_spikes_by_primer_colors(tblBodyDefects, galc, 0.7)
+trend_in_white_primer(tblBodyDefects, galc)
+
+
 
 
 
