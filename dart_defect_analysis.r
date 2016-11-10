@@ -130,5 +130,33 @@ analyze_primer_defects_by_day_of_week <- function(tblBodyDefects)
   aux <- dev.off()
 }
 
-tblBodyDefects <- load_dart_data()
-analyze_primer_defects_by_day_of_week(tblBodyDefects)
+load_weather_data <- function()
+{
+  filename <- 
+  "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\weather\\cincinnati_weather.txt"
+  weather <- fread(filename, header = TRUE, sep = " ", stringsAsFactors = FALSE, showProgress = TRUE, 
+                    colClasses = c("numeric", "numeric", "character", "character", "character",
+					               "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character"
+								   ), data.table = TRUE)
+  cols_to_retain <- c("YR--MODAHRMN", "TEMP", "DEWP")
+  weather <- weather[, .SD, .SDcols = cols_to_retain]
+  weather[, date_captured := substr(weather[['YR--MODAHRMN']], 1, 8)]
+  weather <- weather[((TEMP != "****") & (DEWP != "****")),]
+  weather$TEMP <- as.numeric(weather$TEMP)
+  weather$DEWP <- as.numeric(weather$DEWP)
+  weather[, relative_humidity := 100 - (25/9)*(TEMP - DEWP)]
+  setkey(weather, date_captured)
+  weather_by_date <- weather[, list(avg_temp = mean(TEMP),
+                                    avg_relative_humidity = mean(relative_humidity)), by = date_captured]
+  weather
+}
+
+#source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\dart_defect_analysis.R")
+#tblBodyDefects <- load_dart_data()
+#analyze_primer_defects_by_day_of_week(tblBodyDefects)
+weather <- load_weather_data()
