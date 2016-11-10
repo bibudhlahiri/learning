@@ -149,14 +149,30 @@ load_weather_data <- function()
   weather <- weather[((TEMP != "****") & (DEWP != "****")),]
   weather$TEMP <- as.numeric(weather$TEMP)
   weather$DEWP <- as.numeric(weather$DEWP)
-  weather[, relative_humidity := 100 - (25/9)*(TEMP - DEWP)]
+  weather[, transformed_humidity := (DEWP - TEMP)]
+  weather[, date_captured := paste(substr(date_captured, 1, 4), "-", substr(date_captured, 5, 6), "-", 
+                                           substr(date_captured, 7, 8), sep = "")]
+  
   setkey(weather, date_captured)
   weather_by_date <- weather[, list(avg_temp = mean(TEMP),
-                                    avg_relative_humidity = mean(relative_humidity)), by = date_captured]
-  weather
+                                    avg_transformed_humidity = mean(transformed_humidity)), by = date_captured]
+									
+  #Do a time-series plot of temperature and humidity									   
+  weather_by_date_long <- melt(weather_by_date, id = "date_captured")
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\weather_by_date.png"
+  png(image_file, width = 1200, height = 400)
+  weather_by_date_long[, date_captured := as.Date(weather_by_date_long$date_captured, "%Y-%m-%d")]
+  p <- ggplot(weather_by_date_long, aes(x = date_captured, y = value, colour = variable)) + geom_line() + 
+       scale_x_date(date_labels = "%b-%Y") + xlab("Time") + ylab("Daily average temperature and (transformed) humidity")
+  print(p)
+  aux <- dev.off()
+  
+  weather_by_date
 }
 
+
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\dart_defect_analysis.R")
-#tblBodyDefects <- load_dart_data()
+tblBodyDefects <- load_dart_data()
 #analyze_primer_defects_by_day_of_week(tblBodyDefects)
-weather <- load_weather_data()
+#defects_by_manuf_date <- dart_defects_vs_weather(tblBodyDefects)
+weather_by_date <- load_weather_data()
