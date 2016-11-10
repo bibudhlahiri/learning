@@ -291,6 +291,101 @@ analyze_defects_by_time_of_day <- function(tblBodyDefects, shift_length = 8)
   by_shift
 }
 
+load_weather_data <- function()
+{
+  filename <- 
+  "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\weather\\cincinnati_weather.txt"
+  weather <- fread(filename, header = TRUE, sep = " ", stringsAsFactors = FALSE, showProgress = TRUE, 
+                    colClasses = c("numeric", "numeric", "character", "character", "character",
+					               "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character"
+								   ), data.table = TRUE)
+  cols_to_retain <- c("YR--MODAHRMN", "TEMP", "DEWP")
+  weather <- weather[, .SD, .SDcols = cols_to_retain]
+  weather[, date_captured := substr(weather[['YR--MODAHRMN']], 1, 8)]
+  weather <- weather[((TEMP != "****") & (DEWP != "****")),]
+  weather$TEMP <- as.numeric(weather$TEMP)
+  weather$DEWP <- as.numeric(weather$DEWP)
+  weather[, transformed_humidity := (DEWP - TEMP)]
+  weather[, date_captured := paste(substr(date_captured, 1, 4), "-", substr(date_captured, 5, 6), "-", 
+                                           substr(date_captured, 7, 8), sep = "")]
+  
+  setkey(weather, date_captured)
+  weather_by_date <- weather[, list(avg_temp = mean(TEMP),
+                                    avg_transformed_humidity = mean(transformed_humidity)), by = date_captured]
+									
+  #Do a time-series plot of temperature and humidity									   
+  weather_by_date_long <- melt(weather_by_date, id = "date_captured")
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\weather_by_date.png"
+  png(image_file, width = 1200, height = 400)
+  weather_by_date_long[, date_captured := as.Date(weather_by_date_long$date_captured, "%Y-%m-%d")]
+  p <- ggplot(weather_by_date_long, aes(x = date_captured, y = value, colour = variable)) + geom_line() + 
+       scale_x_date(date_labels = "%b-%Y") + xlab("Time") + ylab("Daily average temperature and (transformed) humidity")
+  print(p)
+  aux <- dev.off()
+  
+  weather_by_date
+}
+
+dart_dpvs_vs_weather <- function(tblBodyDefects)
+{
+  dpv_filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\DPV.csv"
+  dpv_by_manuf_date <- fread(dpv_filename, header = TRUE, sep = ",", stringsAsFactors = FALSE, showProgress = TRUE, 
+                    colClasses = c("Date", "numeric", "numeric", "numeric", "numeric", 
+					               "numeric", "numeric", "numeric", "numeric", "numeric"
+								   ), data.table = TRUE)
+  dpv_by_manuf_date <- dpv_by_manuf_date[(total_DPV <= 500),]
+												 
+  weather_by_date <- load_weather_data()
+										   
+  setkey(dpv_by_manuf_date, manuf_date)
+  setkey(weather_by_date, date_captured)
+  dpv_by_manuf_date <- dpv_by_manuf_date[weather_by_date, nomatch = 0]
+  
+  temp_data_long <- melt(dpv_by_manuf_date[, .SD, .SDcols = c("avg_temp", "total_DPV", "primer_DPV", "base_DPV", "other_DPV")], 
+                         id = "avg_temp")
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\dpvs_vs_temp.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(temp_data_long, aes(x = avg_temp, y = value, colour = variable)) + geom_line() + 
+       xlab("Temperature (in F)") + ylab("DPV for various paint types")
+  print(p)
+  aux <- dev.off()
+  
+  humidity_data_long <- melt(dpv_by_manuf_date[, .SD, .SDcols = c("avg_transformed_humidity", "total_DPV", "primer_DPV", "base_DPV", "other_DPV")], 
+                         id = "avg_transformed_humidity")
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\dpvs_vs_transformed_humidity.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(humidity_data_long, aes(x = avg_transformed_humidity, y = value, colour = variable)) + geom_line() + 
+       xlab("Transformed humidity") + ylab("DPV for various paint types")
+  print(p)
+  aux <- dev.off()
+  
+  #Both total and primer DPV slightly decrease with increased temperature 
+  #cor(dpv_by_manuf_date$avg_temp, dpv_by_manuf_date$total_DPV) -0.148615
+  #cor(dpv_by_manuf_date$avg_temp, dpv_by_manuf_date$primer_DPV) -0.2220721
+
+  #Both total and primer DPV slightly increase with increased humidity
+  #cor(dpv_by_manuf_date$avg_transformed_humidity, dpv_by_manuf_date$total_DPV) 0.1436235
+  #cor(dpv_by_manuf_date$avg_transformed_humidity, dpv_by_manuf_date$primer_DPV) 0.0992924
+  
+  #Do a linear interpolation plot between daily average temperature and primer DPV
+  lm_primer_temp <- lm(primer_DPV ~ avg_temp, data = dpv_by_manuf_date)
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\linear_model_primer_DPV_temp.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(dpv_by_manuf_date, aes(avg_temp, primer_DPV)) + geom_point() + geom_smooth(method = "lm") + 
+       xlab("Average daily temperature") + ylab("Primer DPVs") + 
+       theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
+  print(p)
+  dev.off()
+
+  dpv_by_manuf_date
+}
+
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\temporal_defect_analysis.R")
 tblBodyDefects <- load_dart_data() #2496743 defects, matches exactly with powerpoint based on DART. 1,377,300 defects for PaintSystemID == 7 (primer),
 #whereas ppt says 1,288,568. 130,400 defects for PaintSystemID == 8 (Base), matches with ppt; 989,043 defects for PaintSystemID == 6 (Body Paint Lexus).
@@ -302,7 +397,8 @@ tblBodyDefects <- load_dart_data() #2496743 defects, matches exactly with powerp
 #trend_in_white_primer(tblBodyDefects, galc)
 #defects_by_manuf_date <- daily_defects_from_dart(tblBodyDefects)
 #primer_defects_by_manuf_date <- analyze_primer_defects_by_primer_colors(tblBodyDefects)
-analyze_primer_defects_by_day_of_week(tblBodyDefects)
+#analyze_primer_defects_by_day_of_week(tblBodyDefects)
+dpv_by_manuf_date <- dart_dpvs_vs_weather(tblBodyDefects)
 
 
 
