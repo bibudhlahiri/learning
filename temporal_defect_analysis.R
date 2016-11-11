@@ -34,6 +34,18 @@ load_dart_data <- function()
   tblBodyDefects <- tblBodyDefects[tblPaintBooths, nomatch = 0]
   setkey(tblBodyDefects, PaintSystemID)
   tblBodyDefects <- tblBodyDefects[(PaintSystemID %in% 5:9),]
+  
+  tblBodyDefects[, manuf_date := substr(tblBodyDefects$BoothTime, 1, 10)]
+  
+  #Drop the defect data corresponding to weekends as they are causing too many short-term spikes
+  tblBodyDefects[, day_of_week := weekdays(as.Date(manuf_date, "%Y-%m-%d"))]
+  setkey(tblBodyDefects, day_of_week)
+  tblBodyDefects <- tblBodyDefects[(!(day_of_week %in% c("Saturday", "Sunday"))),]
+  tblBodyDefects$day_of_week <- factor(tblBodyDefects$day_of_week, 
+							           levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"),
+                                       ordered = TRUE)
+									   
+  tblBodyDefects
 }
   
 load_galc_data <- function()
@@ -59,7 +71,6 @@ load_galc_data <- function()
 dpv_from_dart_galc <- function(tblBodyDefects, galc)
 {
   #Generate a daily plot first with number of defects
-  tblBodyDefects[, manuf_date := substr(tblBodyDefects$BoothTime, 1, 10)]
   setkey(tblBodyDefects, manuf_date)
   defects_by_manuf_date <- tblBodyDefects[, list(n_total_defects = length(BodyDefectID),
                                                  n_primer_defects = sum(as.numeric(PaintSystemID == 7)),
@@ -365,14 +376,28 @@ dart_dpvs_vs_weather <- function(tblBodyDefects)
   aux <- dev.off()
   
   #Both total and primer DPV slightly decrease with increased temperature 
-  #cor(dpv_by_manuf_date$avg_temp, dpv_by_manuf_date$total_DPV) -0.148615
-  #cor(dpv_by_manuf_date$avg_temp, dpv_by_manuf_date$primer_DPV) -0.2220721
+  #cor(dpv_by_manuf_date$avg_temp, dpv_by_manuf_date$total_DPV) -0.3850918
+  #cor(dpv_by_manuf_date$avg_temp, dpv_by_manuf_date$primer_DPV) -0.4591692
 
   #Both total and primer DPV slightly increase with increased humidity
-  #cor(dpv_by_manuf_date$avg_transformed_humidity, dpv_by_manuf_date$total_DPV) 0.1436235
-  #cor(dpv_by_manuf_date$avg_transformed_humidity, dpv_by_manuf_date$primer_DPV) 0.0992924
+  #cor(dpv_by_manuf_date$avg_transformed_humidity, dpv_by_manuf_date$total_DPV) 0.08674465
+  #cor(dpv_by_manuf_date$avg_transformed_humidity, dpv_by_manuf_date$primer_DPV) 0.05705113
+  
+  #Min temp = 8.933333, max temp = 83.5185, min total DPV = 5.254902, max total DPV = 125.5696, min primer DPV = 0, max primer DPV = 93.98
+  #Do a linear interpolation plot between daily average temperature and total DPV
+  #Linear model has intercept 88.8003 and slope -0.3687 (For each 3 degree F rise in temperature, Total DPV falls by 1)
+  lm_total_temp <- lm(total_DPV ~ avg_temp, data = dpv_by_manuf_date)
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\linear_model_total_DPV_temp.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(dpv_by_manuf_date, aes(avg_temp, total_DPV)) + geom_point() + geom_smooth(method = "lm") + 
+       xlab("Average daily temperature") + ylab("Total DPVs") + 
+       theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
+  print(p)
+  dev.off()
   
   #Do a linear interpolation plot between daily average temperature and primer DPV
+  #Linear model has intercept 58.1465 and slope -0.3564 (For each 3 degree F rise in temperature, Primer DPV falls by 1)
   lm_primer_temp <- lm(primer_DPV ~ avg_temp, data = dpv_by_manuf_date)
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\linear_model_primer_DPV_temp.png"
   png(image_file,  width = 1200, height = 960, units = "px")
@@ -389,8 +414,8 @@ dart_dpvs_vs_weather <- function(tblBodyDefects)
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\temporal_defect_analysis.R")
 tblBodyDefects <- load_dart_data() #2496743 defects, matches exactly with powerpoint based on DART. 1,377,300 defects for PaintSystemID == 7 (primer),
 #whereas ppt says 1,288,568. 130,400 defects for PaintSystemID == 8 (Base), matches with ppt; 989,043 defects for PaintSystemID == 6 (Body Paint Lexus).
-#galc <- load_galc_data()
-#truncated_defect_data <- dpv_from_dart_galc(tblBodyDefects, galc) 
+galc <- load_galc_data()
+truncated_defect_data <- dpv_from_dart_galc(tblBodyDefects, galc) 
 #by_shift <- analyze_defects_by_time_of_day(tblBodyDefects, 8)
 #primer_defects_by_manuf_date <- analyze_primer_dpv_by_primer_colors(tblBodyDefects, galc)
 #primer_defects_by_manuf_date <- analyze_spikes_by_primer_colors(tblBodyDefects, galc, 0.7)

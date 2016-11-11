@@ -34,12 +34,22 @@ load_dart_data <- function()
   tblBodyDefects <- tblBodyDefects[tblPaintBooths, nomatch = 0]
   setkey(tblBodyDefects, PaintSystemID)
   tblBodyDefects <- tblBodyDefects[(PaintSystemID %in% 5:9),]
+  tblBodyDefects[, manuf_date := substr(tblBodyDefects$BoothTime, 1, 10)]
+  
+  #Drop the defect data corresponding to weekends as they are causing too many short-term spikes
+  tblBodyDefects[, day_of_week := weekdays(as.Date(manuf_date, "%Y-%m-%d"))]
+  setkey(tblBodyDefects, day_of_week)
+  tblBodyDefects <- tblBodyDefects[(!(day_of_week %in% c("Saturday", "Sunday"))),]
+  tblBodyDefects$day_of_week <- factor(tblBodyDefects$day_of_week, 
+							           levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"),
+                                       ordered = TRUE)
+  
+  tblBodyDefects
 }
 
 daily_defects_from_dart <- function(tblBodyDefects)
 {
   #Generate a daily plot first with number of defects
-  tblBodyDefects[, manuf_date := substr(tblBodyDefects$BoothTime, 1, 10)]
   setkey(tblBodyDefects, manuf_date)
   defects_by_manuf_date <- tblBodyDefects[, list(n_total_defects = length(BodyDefectID),
                                                  n_primer_defects = sum(as.numeric(PaintSystemID == 7)),
@@ -80,7 +90,6 @@ analyze_primer_defects_by_primer_colors <- function(tblBodyDefects)
   setkey(primer_defects, ColorID)
   primer_defects <- primer_defects[tblColors, nomatch = 0]
   
-  primer_defects[, manuf_date := substr(primer_defects$BoothTime, 1, 10)]
   setkey(primer_defects, manuf_date)
   primer_defects_by_manuf_date <- primer_defects[, list(n_primer_defects = length(BodyDefectID),
                                                  n_dark_teal = sum(as.numeric(Description == "Dark Teal")),
@@ -115,12 +124,6 @@ analyze_primer_defects_by_day_of_week <- function(tblBodyDefects)
                     colClasses = c("numeric", "character", "character", "character"), data.table = TRUE)
   setkey(primer_defects, ColorID)
   primer_defects <- primer_defects[tblColors, nomatch = 0]
-  
-  primer_defects[, manuf_date := substr(primer_defects$BoothTime, 1, 10)]
-  primer_defects[, day_of_week := weekdays(as.Date(primer_defects$manuf_date, "%Y-%m-%d"))]
-  primer_defects$day_of_week <- factor(primer_defects$day_of_week, 
-							           levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
-                                       ordered = TRUE)
   
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\primer_defects_by_day_of_week.png"
   png(image_file, width = 1200, height = 400)
@@ -172,7 +175,8 @@ load_weather_data <- function()
 
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\dart_defect_analysis.R")
-tblBodyDefects <- load_dart_data()
-#analyze_primer_defects_by_day_of_week(tblBodyDefects)
-#defects_by_manuf_date <- dart_defects_vs_weather(tblBodyDefects)
-weather_by_date <- load_weather_data()
+#tblBodyDefects <- load_dart_data()
+#defects_by_manuf_date <- daily_defects_from_dart(tblBodyDefects)
+analyze_primer_defects_by_primer_colors(tblBodyDefects)
+analyze_primer_defects_by_day_of_week(tblBodyDefects)
+#weather_by_date <- load_weather_data()
