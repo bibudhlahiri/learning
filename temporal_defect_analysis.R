@@ -94,13 +94,13 @@ dpv_from_dart_galc <- function(tblBodyDefects, galc)
   write.table(defects_by_manuf_date, dpv_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
   defects_by_manuf_date[, c("n_total_defects", "n_primer_defects", "n_base_defects", "n_other_defects", "n_vehicles") := NULL]
   
-  #fivenum(defects_by_manuf_date$DPV) 5.254902   54.954248   67.592593   77.905882 2157.000000
-  #mean(defects_by_manuf_date$DPV) 85.10539
-  #Leo found "average" as 79.42 (between our median and mean) using A0_CDATE in GALC and filtering DART for Lexus defects
-  #cor(defects_by_manuf_date$total_DPV, defects_by_manuf_date$primer_DPV) 0.9724779
-  #cor(defects_by_manuf_date$total_DPV, defects_by_manuf_date$base_DPV) 0.9686794
-  #cor(defects_by_manuf_date$total_DPV, defects_by_manuf_date$other_DPV) 0.9066242
-  #cor(defects_by_manuf_date$primer_DPV, defects_by_manuf_date$base_DPV) 0.9454616
+  #fivenum(defects_by_manuf_date$total_DPV) 5.254902  54.954248  67.127757  76.414201 125.569620
+  #mean(defects_by_manuf_date$total_DPV) 67.64421
+  #Leo found "average" as 79.42 (somewhat more than our median and mean) using A0_CDATE in GALC and filtering DART for Lexus defects
+  #cor(defects_by_manuf_date$total_DPV, defects_by_manuf_date$primer_DPV) 0.9315733
+  #cor(defects_by_manuf_date$total_DPV, defects_by_manuf_date$base_DPV) 0.0436072
+  #cor(defects_by_manuf_date$total_DPV, defects_by_manuf_date$other_DPV) 0.6404761
+  #cor(defects_by_manuf_date$primer_DPV, defects_by_manuf_date$base_DPV) -0.0450087
   
   defect_data_long <- melt(defects_by_manuf_date, id = "manuf_date")
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\DPV.png"
@@ -110,22 +110,8 @@ dpv_from_dart_galc <- function(tblBodyDefects, galc)
   print(p)
   aux <- dev.off()
   
-  #Correlations among different types of DPVs are same even after removing high spikes
-  truncated_defect_data <- defects_by_manuf_date[(total_DPV <= 500),]
-  truncated_data_long <- melt(truncated_defect_data, id = "manuf_date")
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\DPV_truncated.png"
-  png(image_file, width = 1200, height = 400)
-  truncated_data_long[, manuf_date := as.Date(truncated_data_long$manuf_date, "%Y-%m-%d")]
-  p <- ggplot(truncated_data_long, aes(x = manuf_date, y = value, colour=variable)) + geom_line() + scale_x_date(date_labels = "%b-%Y") + xlab("Time") + ylab("Daily DPVs by type of defect")
-  print(p)
-  aux <- dev.off()
-  #fivenum(truncated_defect_data$total_DPV) 5.254902  54.701657  67.242519  77.269841 216.833333
-  #mean(truncated_defect_data$total_DPV) 69.7438
-  #fraction <- truncated_defect_data$primer_DPV/truncated_defect_data$total_DPV; median(fraction) 0.549580
-  #fraction <- truncated_defect_data$base_DPV/truncated_defect_data$total_DPV; median(fraction) 0.05524215
-  #fraction <- truncated_defect_data$other_DPV/truncated_defect_data$total_DPV; median(fraction) 0.3938221
-  
-  truncated_defect_data
+  #Comment on 11/11: Truncation is no longer needed after removal of weekends today  
+  defects_by_manuf_date
 }
 
 get_primer_dpvs <- function(tblBodyDefects, galc)
@@ -162,12 +148,12 @@ get_primer_dpvs <- function(tblBodyDefects, galc)
   primer_defects_by_manuf_date[, dark_gray_primer_DPV := n_dark_gray_primer/n_vehicles]
   primer_defects_by_manuf_date[, white_primer_DPV := n_white_primer/n_vehicles]
   
-  #Since we are doing this for all data (not for spikes only), the following line would be required for removing outliers
-  primer_defects_by_manuf_date <- primer_defects_by_manuf_date[(primer_DPV <= 250),]
+  #Comment on 11/11: Truncation is no longer needed after removal of weekends today
+  primer_defects_by_manuf_date
 }
 
 #Dig deeper into primer colors for primer-related defects. White primer DPVs have definitely increased with time.
-analyze_primer_dpv_by_primer_colors <- function()
+analyze_primer_dpv_by_primer_colors <- function(tblBodyDefects, galc)
 {
   primer_defects_by_manuf_date <- get_primer_dpvs(tblBodyDefects, galc)
   primer_defects_by_manuf_date[, c("n_primer_defects", "n_dark_teal", "n_light_gray_primer", "n_dark_gray_primer", "n_white_primer", "n_vehicles") := NULL]
@@ -192,10 +178,11 @@ analyze_spikes_by_primer_colors <- function(tblBodyDefects, galc, percentile = 0
                     colClasses = c("Date", "numeric", "numeric", "numeric", "numeric", 
 					               "numeric", "numeric", "numeric", "numeric", "numeric"
 								   ), data.table = TRUE)
-  truncated_defect_data <- defects_by_manuf_date[(total_DPV <= 500),]
+  
+  ##Comment on 11/11: Truncation is no longer needed after removal of weekends today
   #Let us define the threshold on primer DPV only as we see it in this plot itself.
-  threshold <- as.numeric(quantile(truncated_defect_data$primer_DPV, percentile))
-  spikes <- truncated_defect_data[(primer_DPV >= threshold),]
+  threshold <- as.numeric(quantile(defects_by_manuf_date$primer_DPV, percentile))
+  spikes <- defects_by_manuf_date[(primer_DPV >= threshold),]
   sentence <- paste("percentile = ", percentile, ", threshold = ", threshold, ", no. of spike days = ", nrow(spikes), sep = "")
   cat(paste("With ", sentence, "\n", sep = ""))
   
@@ -266,7 +253,7 @@ trend_in_white_primer <- function(tblBodyDefects, galc)
   #Do a linear interpolation plot
   primer_defects_by_manuf_date[, days_since_first_date := as.numeric(difftime(strptime(manuf_date, "%Y-%m-%d"), strptime("2015-11-11", "%Y-%m-%d"), units = "days"))]
   lm_white_primer <- lm(white_primer_DPV ~ days_since_first_date, data = primer_defects_by_manuf_date)
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\linear_model_white_primer.png"
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\loess_model_white_primer.png"
   png(image_file,  width = 1200, height = 960, units = "px")
   p <- ggplot(primer_defects_by_manuf_date, aes(days_since_first_date, white_primer_DPV)) + geom_point() + geom_smooth(method = "lm") + 
        xlab("Days since first date") + ylab("White primer DPVs") + 
@@ -353,7 +340,7 @@ dart_dpvs_vs_weather <- function(tblBodyDefects)
                     colClasses = c("Date", "numeric", "numeric", "numeric", "numeric", 
 					               "numeric", "numeric", "numeric", "numeric", "numeric"
 								   ), data.table = TRUE)
-  dpv_by_manuf_date <- dpv_by_manuf_date[(total_DPV <= 500),]
+  #Comment on 11/11: Truncation is no longer needed after removal of weekends today
 												 
   weather_by_date <- load_weather_data()
 										   
@@ -391,9 +378,9 @@ dart_dpvs_vs_weather <- function(tblBodyDefects)
   #Do a linear interpolation plot between daily average temperature and total DPV
   #Linear model has intercept 88.8003 and slope -0.3687 (For each 2.7 degree F rise in temperature, Total DPV falls by 1)
   lm_total_temp <- lm(total_DPV ~ avg_temp, data = dpv_by_manuf_date)
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\linear_model_total_DPV_temp.png"
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\loess_model_total_DPV_temp.png"
   png(image_file,  width = 1200, height = 960, units = "px")
-  p <- ggplot(dpv_by_manuf_date, aes(avg_temp, total_DPV)) + geom_point() + geom_smooth(method = "lm") + 
+  p <- ggplot(dpv_by_manuf_date, aes(avg_temp, total_DPV)) + geom_point() + geom_smooth() + 
        xlab("Average daily temperature") + ylab("Total DPVs") + 
        theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
          theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
@@ -403,10 +390,34 @@ dart_dpvs_vs_weather <- function(tblBodyDefects)
   #Do a linear interpolation plot between daily average temperature and primer DPV
   #Linear model has intercept 58.1465 and slope -0.3564 (For each 2.8 degree F rise in temperature, Primer DPV falls by 1)
   lm_primer_temp <- lm(primer_DPV ~ avg_temp, data = dpv_by_manuf_date)
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\linear_model_primer_DPV_temp.png"
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\loess_model_primer_DPV_temp.png"
   png(image_file,  width = 1200, height = 960, units = "px")
-  p <- ggplot(dpv_by_manuf_date, aes(avg_temp, primer_DPV)) + geom_point() + geom_smooth(method = "lm") + 
+  p <- ggplot(dpv_by_manuf_date, aes(avg_temp, primer_DPV)) + geom_point() + geom_smooth() + 
        xlab("Average daily temperature") + ylab("Primer DPVs") + 
+       theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
+  print(p)
+  dev.off()
+  
+  #Do a linear interpolation plot between daily average humidity and total DPV
+  #Linear model has intercept 70.3677 and slope 0.2702 (For each 2.8 degree F rise in temperature, Primer DPV falls by 1)
+  lm_total_humid <- lm(total_DPV ~ avg_transformed_humidity, data = dpv_by_manuf_date)
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\loess_model_total_DPV_humidity.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(dpv_by_manuf_date, aes(avg_transformed_humidity, log(total_DPV))) + geom_point() + geom_smooth() + 
+       xlab("Average daily (transformed) humidity") + ylab("Total DPVs") + 
+       theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
+  print(p)
+  dev.off()
+  
+  #Do a linear interpolation plot between daily average humidity and primer DPV
+  #Linear model has intercept 39.1452 and slope 0.1441 (For each 2.8 degree F rise in temperature, Primer DPV falls by 1)
+  lm_total_humid <- lm(primer_DPV ~ avg_transformed_humidity, data = dpv_by_manuf_date)
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\loess_model_primer_DPV_humidity.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(dpv_by_manuf_date, aes(avg_transformed_humidity, primer_DPV)) + geom_point() + geom_smooth() + 
+       xlab("Average daily (transformed) humidity") + ylab("Primer DPVs") + 
        theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
          theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
   print(p)
@@ -440,9 +451,9 @@ primer_dpv_vs_weather <- function(tblBodyDefects, galc)
   #Do a linear interpolation plot between daily average temperature and dark gray primer DPV
   #Linear model has intercept 37.9508 and slope -0.2699 (For each 3.7 degree F rise in temperature, dark gray DPV falls by 1)
   lm_primer_temp <- lm(dark_gray_primer_DPV ~ avg_temp, data = primer_dpvs_by_manuf_date)
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\linear_model_dark_gray_primer_DPV_temp.png"
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\loess_model_dark_gray_primer_DPV_temp.png"
   png(image_file,  width = 1200, height = 960, units = "px")
-  p <- ggplot(primer_dpvs_by_manuf_date, aes(avg_temp, dark_gray_primer_DPV)) + geom_point() + geom_smooth(method = "lm") + 
+  p <- ggplot(primer_dpvs_by_manuf_date, aes(avg_temp, dark_gray_primer_DPV)) + geom_point() + geom_smooth() + 
        xlab("Average daily temperature") + ylab("Dark Gray Primer DPVs") + 
        theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
          theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
@@ -452,9 +463,9 @@ primer_dpv_vs_weather <- function(tblBodyDefects, galc)
   #Do a linear interpolation plot between daily average temperature and light gray primer DPV
   #Linear model has intercept 21.371 and slope -0.163 (For each 6.13 degree F rise in temperature, light gray primer DPV falls by 1)
   lm_primer_temp <- lm(light_gray_primer_DPV ~ avg_temp, data = primer_dpvs_by_manuf_date)
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\linear_model_light_gray_primer_DPV_temp.png"
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\loess_model_light_gray_primer_DPV_temp.png"
   png(image_file,  width = 1200, height = 960, units = "px")
-  p <- ggplot(primer_dpvs_by_manuf_date, aes(avg_temp, light_gray_primer_DPV)) + geom_point() + geom_smooth(method = "lm") + 
+  p <- ggplot(primer_dpvs_by_manuf_date, aes(avg_temp, light_gray_primer_DPV)) + geom_point() + geom_smooth() + 
        xlab("Average daily temperature") + ylab("Light Gray Primer DPVs") + 
        theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
          theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
@@ -468,7 +479,7 @@ primer_dpv_vs_weather <- function(tblBodyDefects, galc)
 tblBodyDefects <- load_dart_data() #2496743 defects, matches exactly with powerpoint based on DART. 1,377,300 defects for PaintSystemID == 7 (primer),
 #whereas ppt says 1,288,568. 130,400 defects for PaintSystemID == 8 (Base), matches with ppt; 989,043 defects for PaintSystemID == 6 (Body Paint Lexus).
 galc <- load_galc_data()
-#truncated_defect_data <- dpv_from_dart_galc(tblBodyDefects, galc) 
+#defects_by_manuf_date <- dpv_from_dart_galc(tblBodyDefects, galc) 
 #by_shift <- analyze_defects_by_time_of_day(tblBodyDefects, 8)
 #primer_defects_by_manuf_date <- analyze_primer_dpv_by_primer_colors(tblBodyDefects, galc)
 #primer_defects_by_manuf_date <- analyze_spikes_by_primer_colors(tblBodyDefects, galc, 0.7)
@@ -476,8 +487,9 @@ galc <- load_galc_data()
 #defects_by_manuf_date <- daily_defects_from_dart(tblBodyDefects)
 #primer_defects_by_manuf_date <- analyze_primer_defects_by_primer_colors(tblBodyDefects)
 #analyze_primer_defects_by_day_of_week(tblBodyDefects)
-#dpv_by_manuf_date <- dart_dpvs_vs_weather(tblBodyDefects)
+dpv_by_manuf_date <- dart_dpvs_vs_weather(tblBodyDefects)
 primer_dpvs_by_manuf_date <- primer_dpv_vs_weather(tblBodyDefects, galc)
+#primer_defects_by_manuf_date <- analyze_primer_dpv_by_primer_colors(tblBodyDefects, galc)
 
 
 
