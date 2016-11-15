@@ -155,7 +155,14 @@ load_weather_data <- function()
   weather[, transformed_humidity := (DEWP - TEMP)]
   weather[, date_captured := paste(substr(date_captured, 1, 4), "-", substr(date_captured, 5, 6), "-", 
                                            substr(date_captured, 7, 8), sep = "")]
-  
+  weather[, DefectTime := paste(date_captured, " ", substr(weather[['YR--MODAHRMN']], 9, 10), ":", 
+										   substr(weather[['YR--MODAHRMN']], 11, 12), ":00", sep = "")]
+  weather
+}
+
+plot_weather_by_date <- function()
+{
+  weather <- load_weather_data()
   setkey(weather, date_captured)
   weather_by_date <- weather[, list(avg_temp = mean(TEMP),
                                     avg_transformed_humidity = mean(transformed_humidity)), by = date_captured]
@@ -174,9 +181,52 @@ load_weather_data <- function()
 }
 
 
+#input_data is a data.table with a column named DefectTime with date and time in the format 
+#YYYY-MM-DD HH:MI:SS. It is returned with the shift values mapped as per rules of Toyota.
+map_shifts <- function(input_data)
+{
+  #The plot should be based on a data.table with the following entries: (date, shift, avg_temp, num_defects).
+  #First, get (date, shift, num_defects) from DART data, then, get (date, shift, avg_temp) from weather data.
+  
+  input_data[, defect_date := substr(input_data$DefectTime, 1, 10)]
+  input_data[, defect_time := substr(input_data$DefectTime, 12, 19)]
+  input_data[, defect_date_time := paste(input_data$defect_date, input_data$defect_time, sep = " ")]
+  input_data[, DefectTime := NULL]
+  input_data[, shift_A_start := paste(input_data$defect_date, "06:00:00", sep = " ")]
+  input_data[, shift_A_end := paste(input_data$defect_date, "13:59:59", sep = " ")]
+  input_data[, shift_B_start := paste(input_data$defect_date, "17:00:00", sep = " ")]
+  #The shift B starting on a given day actually ends on the next day. The sequence of shifts in a given day would be
+  #Overtime shift B, Shift A, Overtime Shift A and Shift B.
+  input_data[, shift_B_end := paste(as.character(as.Date(input_data$defect_date) + 1), "00:59:59", sep = " ")]
+  input_data[, prev_day_shift_B_start := paste(as.character(as.Date(input_data$defect_date) - 1), "17:00:00", sep = " ")]
+  input_data[, prev_day_shift_B_end := paste(input_data$defect_date, "00:59:59", sep = " ")] #The end of the previous day's shift B falls today
+  input_data[, overtime_A_start := paste(input_data$defect_date, "14:00:00", sep = " ")]
+  input_data[, overtime_A_end := paste(input_data$defect_date, "16:59:59", sep = " ")]
+
+  input_data[, shift := ifelse((input_data$defect_date_time >= input_data$shift_A_start & input_data$defect_date_time <= input_data$shift_A_end), "Shift_A",
+                                 ifelse((input_data$defect_date_time >= input_data$shift_B_start & input_data$defect_date_time <= input_data$shift_B_end), "Shift_B", 
+  							        ifelse((input_data$defect_date_time >= input_data$overtime_A_start & input_data$defect_date_time < input_data$overtime_A_end), "Overtime_A",
+  										    ifelse((input_data$defect_date_time >= input_data$prev_day_shift_B_start & input_data$defect_date_time < input_data$prev_day_shift_B_end), "Shift_B", 
+											"Overtime_B"))))]
+  #input_data[ ,c("shift_A_start", "shift_A_end", "shift_B_start", "shift_B_end", 
+  #                   "overtime_A_start", "overtime_A_end") := NULL]
+  input_data
+}
+
+#Combine temperature and shift analysis. Take the average temperature for each shift each day,
+#and get the number of defects in that shift, and plot three lines for shifts A, B and overtime, 
+#with temperature on the X-axis and number of defects on the Y-axis. Shift A: 6 AM – 2 PM,
+#Shift B: 5 PM – 1 AM, Overtime Shift A: 2 PM - 5 PM, Overtime shift B: 1 AM - 6 AM.
+weather_and_shift_analysis <- function(tblBodyDefects)
+{
+  weather <- load_weather_data()
+  weather <- map_shifts(weather)
+}
+
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\dart_defect_analysis.R")
 #tblBodyDefects <- load_dart_data()
 #defects_by_manuf_date <- daily_defects_from_dart(tblBodyDefects)
-analyze_primer_defects_by_primer_colors(tblBodyDefects)
-analyze_primer_defects_by_day_of_week(tblBodyDefects)
+#analyze_primer_defects_by_primer_colors(tblBodyDefects)
+#analyze_primer_defects_by_day_of_week(tblBodyDefects)
 #weather_by_date <- load_weather_data()
+#tblBodyDefects <- weather_and_shift_analysis(tblBodyDefects)
