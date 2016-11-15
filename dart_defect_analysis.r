@@ -208,8 +208,12 @@ map_shifts <- function(input_data)
   							        ifelse((input_data$defect_date_time >= input_data$overtime_A_start & input_data$defect_date_time < input_data$overtime_A_end), "Overtime_A",
   										    ifelse((input_data$defect_date_time >= input_data$prev_day_shift_B_start & input_data$defect_date_time < input_data$prev_day_shift_B_end), "Shift_B", 
 											"Overtime_B"))))]
-  #input_data[ ,c("shift_A_start", "shift_A_end", "shift_B_start", "shift_B_end", 
-  #                   "overtime_A_start", "overtime_A_end") := NULL]
+											
+  #Adding a shift_belongs_to_date as shift B (between 12:00 and 1 AM), can belong to a previous date 
+  input_data[, shift_belongs_to_date := ifelse((input_data$defect_date_time >= input_data$prev_day_shift_B_start & input_data$defect_date_time < input_data$prev_day_shift_B_end), 
+                                                as.character(as.Date(input_data$defect_date) - 1), input_data$defect_date)]
+  input_data[ ,c("shift_A_start", "shift_A_end", "shift_B_start", "shift_B_end", 
+                     "overtime_A_start", "overtime_A_end", "prev_day_shift_B_start", "prev_day_shift_B_end") := NULL]
   input_data
 }
 
@@ -217,10 +221,29 @@ map_shifts <- function(input_data)
 #and get the number of defects in that shift, and plot three lines for shifts A, B and overtime, 
 #with temperature on the X-axis and number of defects on the Y-axis. Shift A: 6 AM – 2 PM,
 #Shift B: 5 PM – 1 AM, Overtime Shift A: 2 PM - 5 PM, Overtime shift B: 1 AM - 6 AM.
-weather_and_shift_analysis <- function(tblBodyDefects)
+weather_and_shift_analysis <- function()
 {
   weather <- load_weather_data()
   weather <- map_shifts(weather)
+  #tblBodyDefects <- map_shifts(tblBodyDefects)
+  
+  #Get average temperature for each shift, each day. Use the shift_belongs_to_date.
+  #In winter, the temperatures for 4 shifts are more overlapping, but in winter, the temperatures in 
+  #shift B (5 PM – 1 AM) and overtime A (2 PM - 5 PM) are on average a few degrees higher than shift A (6 AM – 2 PM) 
+  #and overtime B (1 AM - 6 AM), i.e., 2 PM - 1 AM (afternoon, evening and night) is warmer than 1 AM - 2 PM (late night through morning).
+  #We have noticed that in summer, there is a significant dip in defects in Shift B but not so much in shift A, and 
+  #also that once the temperature is past 65 F, the defects increase with increasing temperature. So the observations are 
+  #not consistent at this point.
+  setkey(weather, shift_belongs_to_date, shift)
+  weather_by_shift <- weather[, list(avg_temp = mean(TEMP)), by = list(shift_belongs_to_date, shift)]
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\shift_vs_temperature.png"
+  png(image_file, width = 1200, height = 400)
+  weather_by_shift[, shift_belongs_to_date := as.Date(weather_by_shift$shift_belongs_to_date, "%Y-%m-%d")]
+  p <- ggplot(weather_by_shift, aes(x = shift_belongs_to_date, y = avg_temp, colour = shift)) + geom_line() + scale_x_date(date_labels = "%b-%Y") + 
+       xlab("Time") + ylab("Daily temperature by shifts")
+  print(p)
+  aux <- dev.off()
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\dart_defect_analysis.R")
@@ -229,4 +252,4 @@ weather_and_shift_analysis <- function(tblBodyDefects)
 #analyze_primer_defects_by_primer_colors(tblBodyDefects)
 #analyze_primer_defects_by_day_of_week(tblBodyDefects)
 #weather_by_date <- load_weather_data()
-#tblBodyDefects <- weather_and_shift_analysis(tblBodyDefects)
+weather_and_shift_analysis()
