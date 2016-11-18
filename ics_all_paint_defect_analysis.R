@@ -36,13 +36,16 @@ load_ics_data <- function()
   #from the ICS_VEHICLE_INFO_MV table. ICS+ history has only MODEL_NUM and not Katashiki.
   
   #Drop the defect data corresponding to weekends as they are causing too many short-term spikes
-  lexus_paint_defects[, day_of_week := weekdays(as.Date(lexus_paint_defects$CREATION_TIME, "%d-%b-%y"))]
-  setkey(lexus_paint_defects, day_of_week)
-  lexus_paint_defects <- lexus_paint_defects[(!(day_of_week %in% c("Saturday", "Sunday"))),]
-  lexus_paint_defects$day_of_week <- factor(lexus_paint_defects$day_of_week, 
+  ics_history[, day_of_week := weekdays(as.Date(ics_history$CREATION_TIME, "%d-%b-%y"))]
+  setkey(ics_history, day_of_week)
+  ics_history <- ics_history[(!(day_of_week %in% c("Saturday", "Sunday"))),]
+  ics_history$day_of_week <- factor(ics_history$day_of_week, 
 							           levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"),
                                        ordered = TRUE)
-  lexus_paint_defects
+									   
+  #Start from 1 Oct 2015 as that was the time when ICS+ became operational/stable
+  #setkey(ics_history, as.Date(CREATION_TIME, "%d-%b-%y"))
+  ics_history[(as.Date(CREATION_TIME, "%d-%b-%y") >= as.Date("2015-10-01")),]
 }
 
 analyze_by_portion <- function(lexus_paint_defects)
@@ -274,6 +277,38 @@ analyze_by_creation_date_and_shift <- function(lexus_paint_defects)
   by_creation_time
 }
 
+#Analyzing Paint Finish since it is the section contributing to most defects
+analyze_paint_finish_by_creation_date_and_shift <- function(lexus_paint_defects)
+{
+  setkey(lexus_paint_defects, SECTION_NUM)
+  pf_defects <- lexus_paint_defects[(SECTION_NUM == "PF"),]
+  #In pf_defects, total 50710 defects from shift A (1.8 times shift B), 27843 defects from shift B. 64% from shift A, 36% from shift B.
+  setkey(pf_defects, CREATION_TIME, RESPONSIBLE_SHIFT)
+  by_creation_time <- pf_defects[, list(n_defects = length(DEFECT_ID)), by = list(CREATION_TIME, RESPONSIBLE_SHIFT)] 
+  by_creation_time[, manuf_date := as.Date(by_creation_time$CREATION_TIME, "%d-%b-%y")]
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\all_defects\\pf_defects_per_day_and_shift.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(by_creation_time, aes(manuf_date, n_defects)) + geom_line(aes(colour = RESPONSIBLE_SHIFT)) + scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + 
+       xlab("Date") + ylab("No. of paint defects") + theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  aux <- dev.off()
+  
+  by_creation_time_wide <- dcast(by_creation_time, formula = CREATION_TIME + manuf_date ~ RESPONSIBLE_SHIFT, value.var = "n_defects")
+  by_creation_time_wide[, shift_diff := A - B]
+  by_creation_time_long <- melt(by_creation_time_wide[, .SD, .SDcols = c("manuf_date", "A", "B", "shift_diff")], 
+                                id = "manuf_date")
+								
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\pf_defects_with_shift_diff.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(by_creation_time_long, aes(x = manuf_date, y = value, colour = variable)) + geom_line() + 
+       xlab("Date") + ylab("Total defects by shift and their difference")
+  print(p)
+  aux <- dev.off()
+  
+  by_creation_time
+}
+
 
 analyze_by_day_of_week <- function(lexus_paint_defects)
 {
@@ -299,8 +334,8 @@ analyze_by_day_of_week <- function(lexus_paint_defects)
 
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_all_paint_defect_analysis.R")
-lexus_paint_defects <- load_ics_data() #227,434 rows
-galc <- load_galc_data()
+#lexus_paint_defects <- load_ics_data() #215,821 rows
+#galc <- load_galc_data()
 #by_portion <- analyze_by_portion(lexus_paint_defects)
 #by_item <- analyze_by_item(lexus_paint_defects)
 #by_page <- analyze_by_page(lexus_paint_defects)
@@ -309,7 +344,8 @@ galc <- load_galc_data()
 #by_discrepancy <- analyze_by_discrepancy(lexus_paint_defects)
 #by_day_of_week <- analyze_by_day_of_week(lexus_paint_defects)
 #by_creation_time <- analyze_by_creation_date_and_shift(lexus_paint_defects)
-defects_by_manuf_date <- dpv_from_dart_galc(lexus_paint_defects, galc, 40)
+#defects_by_manuf_date <- dpv_from_dart_galc(lexus_paint_defects, galc, 40)
+by_creation_time <- analyze_paint_finish_by_creation_date_and_shift(lexus_paint_defects)
 
 
 
