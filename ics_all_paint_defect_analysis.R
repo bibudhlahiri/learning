@@ -224,7 +224,8 @@ load_galc_data <- function()
 dpv_from_ics_galc <- function(lexus_paint_defects, galc, threshold = 50)
 {
   setkey(lexus_paint_defects, CREATION_TIME)
-  defects_by_manuf_date <- lexus_paint_defects[, list(n_defects = length(DEFECT_ID)), by = CREATION_TIME] 
+  defects_by_manuf_date <- lexus_paint_defects[, list(n_defects = length(DEFECT_ID),
+                                                      n_pf_defects = sum(as.numeric(SECTION_NUM == "PF"))), by = CREATION_TIME] 
   defects_by_manuf_date[, manuf_date := strftime(strptime(defects_by_manuf_date$CREATION_TIME, "%d-%b-%y"), "%Y-%m-%d")]   
   
   
@@ -237,6 +238,7 @@ dpv_from_ics_galc <- function(lexus_paint_defects, galc, threshold = 50)
   setkey(defects_by_manuf_date, manuf_date)
   defects_by_manuf_date <- defects_by_manuf_date[vehicles_by_manuf_date, nomatch = 0]
   defects_by_manuf_date[, total_DPV := n_defects/n_vehicles] 
+  defects_by_manuf_date[, pf_DPV := n_pf_defects/n_vehicles]
   
   dpv_filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\documents\\ICS\\DPV.csv"
   write.table(defects_by_manuf_date, dpv_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
@@ -387,6 +389,7 @@ dpv_for_paint_finish <- function(lexus_paint_defects, galc, threshold = 20)
   aux <- dev.off()
   
   trunc_pf_defects_by_manuf_date <- pf_defects_by_manuf_date[(pf_DPV <= threshold),]
+  cat(paste("Truncating ", 100*(1 - nrow(trunc_pf_defects_by_manuf_date)/nrow(pf_defects_by_manuf_date)), "% of points", "\n", sep = ""))
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\all_defects\\trunc_PF_DPV.png"
   png(image_file, width = 1200, height = 400)
   p <- ggplot(trunc_pf_defects_by_manuf_date, aes(x = manuf_date, y = pf_DPV)) + geom_line() + 
@@ -430,7 +433,7 @@ ics_dpvs_vs_external_weather <- function()
 {
   dpv_filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\documents\\ICS\\DPV.csv"
   dpv_by_manuf_date <- fread(dpv_filename, header = TRUE, sep = ",", stringsAsFactors = FALSE, showProgress = TRUE, 
-                    colClasses = c("Date", "numeric", "Date", "numeric", "numeric"), data.table = TRUE)
+                    colClasses = c("Date", "numeric", "numeric", "Date", "numeric", "numeric", "numeric"), data.table = TRUE)
 												 
   weather_by_date <- load_external_weather_data()
 										   
@@ -449,7 +452,7 @@ ics_dpvs_vs_external_weather <- function()
   lm_total_temp <- lm(total_DPV ~ avg_temp, data = dpv_by_manuf_date)
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\weather\\external\\loess_model_total_DPV_temp.png"
   png(image_file,  width = 1200, height = 960, units = "px")
-  p <- ggplot(dpv_by_manuf_date, aes(avg_temp, total_DPV)) + geom_point() + geom_smooth() + 
+  p <- ggplot(dpv_by_manuf_date, aes(avg_temp, total_DPV)) + geom_point() + geom_smooth(method = "lm") + 
        xlab("Average daily temperature") + ylab("Total DPVs") + 
        theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
          theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
@@ -461,7 +464,7 @@ ics_dpvs_vs_external_weather <- function()
   lm_total_humid <- lm(total_DPV ~ avg_humidity, data = dpv_by_manuf_date)
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\weather\\external\\loess_model_total_DPV_humidity.png"
   png(image_file,  width = 1200, height = 960, units = "px")
-  p <- ggplot(dpv_by_manuf_date, aes(avg_humidity, total_DPV)) + geom_point() + geom_smooth() + 
+  p <- ggplot(dpv_by_manuf_date, aes(avg_humidity, total_DPV)) + geom_point() + geom_smooth(method = "lm") + 
        xlab("Average daily humidity") + ylab("Total DPVs") + 
        theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
          theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
@@ -469,6 +472,65 @@ ics_dpvs_vs_external_weather <- function()
   dev.off()
 
   dpv_by_manuf_date
+}
+
+
+paint_finish_dpvs_vs_external_weather <- function()
+{
+  dpv_filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\documents\\ICS\\DPV.csv"
+  dpv_by_manuf_date <- fread(dpv_filename, header = TRUE, sep = ",", stringsAsFactors = FALSE, showProgress = TRUE, 
+                    colClasses = c("Date", "numeric", "numeric", "Date", "numeric", "numeric", "numeric"), data.table = TRUE)
+												 
+  weather_by_date <- load_external_weather_data()
+										   
+  setkey(dpv_by_manuf_date, manuf_date)
+  setkey(weather_by_date, date_captured)
+  dpv_by_manuf_date <- dpv_by_manuf_date[weather_by_date, nomatch = 0]
+  
+  #Both total and primer DPV slightly decrease with increased temperature 
+  print(cor(dpv_by_manuf_date$avg_temp, dpv_by_manuf_date$pf_DPV)) #-0.3286385
+
+  #Both total and primer DPV slightly increase with increased humidity
+  print(cor(dpv_by_manuf_date$avg_humidity, dpv_by_manuf_date$pf_DPV)) #-0.0008161758
+  
+  #Do a linear interpolation plot between daily average temperature and PF DPV
+  #Linear model has intercept 4.17621 and slope -0.03179 (For each 31.45 degree F rise in temperature, PF DPV falls by 1)
+  lm_pf_temp <- lm(pf_DPV ~ avg_temp, data = dpv_by_manuf_date)
+  print(lm_pf_temp)
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\weather\\external\\loess_model_pf_DPV_temp.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(dpv_by_manuf_date, aes(avg_temp, pf_DPV)) + geom_point() + geom_smooth(method = "lm") + 
+       xlab("Average daily temperature") + ylab("Total DPVs") + 
+       theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
+  print(p)
+  dev.off()
+  
+  #Do a linear interpolation plot between daily average humidity and PF DPV
+  #Linear model has intercept 2.3493 and slope -0.0002547 (Negligible)
+  lm_pf_humid <- lm(pf_DPV ~ avg_humidity, data = dpv_by_manuf_date)
+  print(lm_pf_humid)
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\weather\\external\\loess_model_pf_DPV_humidity.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(dpv_by_manuf_date, aes(avg_humidity, pf_DPV)) + geom_point() + geom_smooth(method = "lm") + 
+       xlab("Average daily humidity") + ylab("Total DPVs") + 
+       theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
+  print(p)
+  dev.off()
+
+  dpv_by_manuf_date
+}
+
+#The difference of paint finish defects between shifts A and B show sort of a quarterly seasonal (not cyclic) pattern.
+time_series_analysis <- function(lexus_paint_defects)
+{
+  by_creation_time_wide <- analyze_paint_finish_by_creation_date_and_shift(lexus_paint_defects)
+  shift_diff <- by_creation_time_wide$shift_diff
+  shift_diff <- shift_diff[!is.na(shift_diff)]
+  #Figure out the frequency here
+  myts <- ts(x, start = c(2015,10,1), frequency = 365.25)
+  fit <- stl(myts, s.window = "period")
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_all_paint_defect_analysis.R")
@@ -483,9 +545,10 @@ lexus_paint_defects <- load_ics_data() #215,821 rows
 #by_day_of_week <- analyze_by_day_of_week(lexus_paint_defects)
 #by_creation_time <- analyze_by_creation_date_and_shift(lexus_paint_defects)
 #defects_by_manuf_date <- dpv_from_ics_galc(lexus_paint_defects, galc, 40)
-by_creation_time_wide <- analyze_paint_finish_by_creation_date_and_shift(lexus_paint_defects)
-#pf_defects_by_manuf_date <- dpv_for_paint_finish(lexus_paint_defects, galc)
+#by_creation_time_wide <- analyze_paint_finish_by_creation_date_and_shift(lexus_paint_defects)
+pf_defects_by_manuf_date <- dpv_for_paint_finish(lexus_paint_defects, galc)
 #dpv_by_manuf_date <- ics_dpvs_vs_external_weather()
+#dpv_by_manuf_date <- paint_finish_dpvs_vs_external_weather()
 
 
 
