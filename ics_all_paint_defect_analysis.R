@@ -73,6 +73,8 @@ analyze_by_portion <- function(lexus_paint_defects)
   by_portion
 }
 
+
+#Items DOOR, DOOR OPENING and DOOR INNER SURFACE contribute to 50% of all paint defects
 analyze_by_item <- function(lexus_paint_defects)
 {
   setkey(lexus_paint_defects, ITEM)
@@ -99,6 +101,7 @@ analyze_by_item <- function(lexus_paint_defects)
   by_item
 }
 
+#33% of paint defects are from Page = "096B EXTERIOR SURFACE"
 analyze_by_page <- function(lexus_paint_defects)
 {
   setkey(lexus_paint_defects, PAGE)
@@ -125,6 +128,7 @@ analyze_by_page <- function(lexus_paint_defects)
   by_page
 }
 
+#26.66% of paint defects are from terminal = RH_TL_INPUT
 analyze_by_terminal <- function(lexus_paint_defects)
 {
   setkey(lexus_paint_defects, TERMINAL)
@@ -217,7 +221,7 @@ load_galc_data <- function()
 }
 
 
-dpv_from_dart_galc <- function(lexus_paint_defects, galc, threshold = 50)
+dpv_from_ics_galc <- function(lexus_paint_defects, galc, threshold = 50)
 {
   setkey(lexus_paint_defects, CREATION_TIME)
   defects_by_manuf_date <- lexus_paint_defects[, list(n_defects = length(DEFECT_ID)), by = CREATION_TIME] 
@@ -259,6 +263,7 @@ dpv_from_dart_galc <- function(lexus_paint_defects, galc, threshold = 50)
   defects_by_manuf_date
 }
 
+
 analyze_by_creation_date_and_shift <- function(lexus_paint_defects)
 {
   setkey(lexus_paint_defects, CREATION_TIME, RESPONSIBLE_SHIFT)
@@ -276,39 +281,6 @@ analyze_by_creation_date_and_shift <- function(lexus_paint_defects)
   by_creation_time <- by_creation_time[order(manuf_date)]
   by_creation_time
 }
-
-#Analyzing Paint Finish since it is the section contributing to most defects
-analyze_paint_finish_by_creation_date_and_shift <- function(lexus_paint_defects)
-{
-  setkey(lexus_paint_defects, SECTION_NUM)
-  pf_defects <- lexus_paint_defects[(SECTION_NUM == "PF"),]
-  #In pf_defects, total 50710 defects from shift A (1.8 times shift B), 27843 defects from shift B. 64% from shift A, 36% from shift B.
-  setkey(pf_defects, CREATION_TIME, RESPONSIBLE_SHIFT)
-  by_creation_time <- pf_defects[, list(n_defects = length(DEFECT_ID)), by = list(CREATION_TIME, RESPONSIBLE_SHIFT)] 
-  by_creation_time[, manuf_date := as.Date(by_creation_time$CREATION_TIME, "%d-%b-%y")]
-  
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\all_defects\\pf_defects_per_day_and_shift.png"
-  png(image_file, width = 1200, height = 400)
-  p <- ggplot(by_creation_time, aes(manuf_date, n_defects)) + geom_line(aes(colour = RESPONSIBLE_SHIFT)) + scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + 
-       xlab("Date") + ylab("No. of paint defects") + theme(axis.text.x = element_text(angle = 90))
-  print(p)
-  aux <- dev.off()
-  
-  by_creation_time_wide <- dcast(by_creation_time, formula = CREATION_TIME + manuf_date ~ RESPONSIBLE_SHIFT, value.var = "n_defects")
-  by_creation_time_wide[, shift_diff := A - B]
-  by_creation_time_long <- melt(by_creation_time_wide[, .SD, .SDcols = c("manuf_date", "A", "B", "shift_diff")], 
-                                id = "manuf_date")
-								
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\DART\\pf_defects_with_shift_diff.png"
-  png(image_file, width = 1200, height = 400)
-  p <- ggplot(by_creation_time_long, aes(x = manuf_date, y = value, colour = variable)) + geom_line() + 
-       xlab("Date") + ylab("Total defects by shift and their difference")
-  print(p)
-  aux <- dev.off()
-  
-  by_creation_time
-}
-
 
 analyze_by_day_of_week <- function(lexus_paint_defects)
 {
@@ -332,9 +304,175 @@ analyze_by_day_of_week <- function(lexus_paint_defects)
   by_day_of_week
 }
 
+#Analyzing Paint Finish by date since it is the section contributing to most defects.
+#Observation: Shift A is a clear winner, which was not visible when we took all defects.
+#The shift difference was high initially and fell after if we consider the long-term trend,
+#but there are short-term cycles still present.
+analyze_paint_finish_by_creation_date_and_shift <- function(lexus_paint_defects)
+{
+  setkey(lexus_paint_defects, SECTION_NUM)
+  pf_defects <- lexus_paint_defects[(SECTION_NUM == "PF"),]
+  #In pf_defects, total 50710 defects from shift A (1.8 times shift B), 27843 defects from shift B. 64% from shift A, 36% from shift B.
+  setkey(pf_defects, CREATION_TIME, RESPONSIBLE_SHIFT)
+  by_creation_time <- pf_defects[, list(n_defects = length(DEFECT_ID)), by = list(CREATION_TIME, RESPONSIBLE_SHIFT)] 
+  by_creation_time[, manuf_date := as.Date(by_creation_time$CREATION_TIME, "%d-%b-%y")]
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\all_defects\\pf_defects_per_day_and_shift.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(by_creation_time, aes(manuf_date, n_defects)) + geom_line(aes(colour = RESPONSIBLE_SHIFT)) + scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + 
+       xlab("Date") + ylab("No. of paint defects") + theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  aux <- dev.off()
+  
+  by_creation_time_wide <- dcast(by_creation_time, formula = CREATION_TIME + manuf_date ~ RESPONSIBLE_SHIFT, value.var = "n_defects")
+  by_creation_time_wide[, shift_diff := A - B]
+  #fivenum(by_creation_time_wide$A) 33.0 141.0 183.5 234.0 586.0
+  #fivenum(by_creation_time_wide$B)  1.0  77.0 105.5 142.0 362.0
+  #fivenum(by_creation_time_wide$shift_diff) -61.0  32.0  63.0 124.5 506.0
+  by_creation_time_long <- melt(by_creation_time_wide[, .SD, .SDcols = c("manuf_date", "A", "B", "shift_diff")], 
+                                id = "manuf_date")
+								
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\all_defects\\pf_defects_with_shift_diff.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(by_creation_time_long, aes(x = manuf_date, y = value, colour = variable)) + geom_line() + 
+       scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + 
+       xlab("Date") + ylab("Total defects by shift and their difference")
+  print(p)
+  aux <- dev.off()
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\all_defects\\pf_shift_diff_only.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(by_creation_time_wide, aes(x = manuf_date, y = shift_diff)) + geom_line() + 
+       scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + 
+       xlab("Date") + ylab("Difference between number of defects in two shifts")
+  print(p)
+  aux <- dev.off()
+  
+  by_creation_time_wide
+}
+
+#Check DPVs arising from Paint Finish as most defects come from there. Assumption is that
+#all vehicles undergo paint finish, so we can use the same numbers as used for total DPV
+#from GALC.
+#Observation: Paint finish DPVs have been fairly consistent around 2 since mid-January
+dpv_for_paint_finish <- function(lexus_paint_defects, galc, threshold = 20)
+{
+  setkey(lexus_paint_defects, SECTION_NUM)
+  pf_defects <- lexus_paint_defects[(SECTION_NUM == "PF"),]
+  
+  setkey(pf_defects, CREATION_TIME)
+  pf_defects_by_manuf_date <- pf_defects[, list(n_pf_defects = length(DEFECT_ID)), by = CREATION_TIME] 
+  pf_defects_by_manuf_date[, manuf_date := strftime(strptime(pf_defects_by_manuf_date$CREATION_TIME, "%d-%b-%y"), "%Y-%m-%d")]   
+  
+  
+  #Get the number of Lexus vehicles manufactured each day to compute DPV  
+  setkey(galc, manuf_date)
+  vehicles_by_manuf_date <- galc[, list(n_vehicles = length(VIN_NO)), by = manuf_date]
+  
+  #Combine ICS and GALC data to compute DPV
+  setkey(vehicles_by_manuf_date, manuf_date)
+  setkey(pf_defects_by_manuf_date, manuf_date)
+  pf_defects_by_manuf_date <- pf_defects_by_manuf_date[vehicles_by_manuf_date, nomatch = 0]
+  pf_defects_by_manuf_date[, pf_DPV := n_pf_defects/n_vehicles] 
+  
+  print(fivenum(pf_defects_by_manuf_date$pf_DPV)) #0.7085427  1.4371585  1.9239770  2.7229730 53.3846154
+  print(mean(pf_defects_by_manuf_date$pf_DPV)) #3.143101
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\all_defects\\PF_DPV.png"
+  png(image_file, width = 1200, height = 400)
+  pf_defects_by_manuf_date[, manuf_date := as.Date(pf_defects_by_manuf_date$manuf_date, "%Y-%m-%d")]
+  p <- ggplot(pf_defects_by_manuf_date, aes(x = manuf_date, y = pf_DPV)) + geom_line() + 
+       scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + xlab("Time") + ylab("Daily Paint Finish DPVs")
+  print(p)
+  aux <- dev.off()
+  
+  trunc_pf_defects_by_manuf_date <- pf_defects_by_manuf_date[(pf_DPV <= threshold),]
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\all_defects\\trunc_PF_DPV.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(trunc_pf_defects_by_manuf_date, aes(x = manuf_date, y = pf_DPV)) + geom_line() + 
+       scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + xlab("Time") + ylab("Daily Paint Finish DPVs (truncated plot)")
+  print(p)
+  aux <- dev.off()
+   
+  pf_defects_by_manuf_date
+}
+
+load_external_weather_data <- function()
+{
+  filename <- 
+  "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\weather\\cincinnati_weather.txt"
+  weather <- fread(filename, header = TRUE, sep = " ", stringsAsFactors = FALSE, showProgress = TRUE, 
+                    colClasses = c("numeric", "numeric", "character", "character", "character",
+					               "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character"
+								   ), data.table = TRUE)
+  cols_to_retain <- c("YR--MODAHRMN", "TEMP", "DEWP")
+  weather <- weather[, .SD, .SDcols = cols_to_retain]
+  weather[, date_captured := substr(weather[['YR--MODAHRMN']], 1, 8)]
+  weather <- weather[((TEMP != "****") & (DEWP != "****")),]
+  weather$TEMP <- as.numeric(weather$TEMP)
+  weather$DEWP <- as.numeric(weather$DEWP)
+  weather[, humidity := (DEWP - TEMP)]
+  weather[, date_captured := paste(substr(date_captured, 1, 4), "-", substr(date_captured, 5, 6), "-", 
+                                           substr(date_captured, 7, 8), sep = "")]
+  weather[, DefectTime := paste(date_captured, " ", substr(weather[['YR--MODAHRMN']], 9, 10), ":", 
+										   substr(weather[['YR--MODAHRMN']], 11, 12), ":00", sep = "")]
+  setkey(weather, date_captured)
+  weather_by_date <- weather[, list(avg_temp = mean(TEMP),
+                                    avg_humidity = mean(humidity)), by = date_captured]
+}
+
+ics_dpvs_vs_external_weather <- function()
+{
+  dpv_filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\documents\\ICS\\DPV.csv"
+  dpv_by_manuf_date <- fread(dpv_filename, header = TRUE, sep = ",", stringsAsFactors = FALSE, showProgress = TRUE, 
+                    colClasses = c("Date", "numeric", "Date", "numeric", "numeric"), data.table = TRUE)
+												 
+  weather_by_date <- load_external_weather_data()
+										   
+  setkey(dpv_by_manuf_date, manuf_date)
+  setkey(weather_by_date, date_captured)
+  dpv_by_manuf_date <- dpv_by_manuf_date[weather_by_date, nomatch = 0]
+  
+  #Both total and primer DPV slightly decrease with increased temperature 
+  #cor(dpv_by_manuf_date$avg_temp, dpv_by_manuf_date$total_DPV) -0.3868221
+
+  #Both total and primer DPV slightly increase with increased humidity
+  #cor(dpv_by_manuf_date$avg_humidity, dpv_by_manuf_date$total_DPV) 0.0902064
+  
+  #Do a linear interpolation plot between daily average temperature and total DPV
+  #Linear model has intercept 12.06973 and slope -0.09833 (For each 11.11 degree F rise in temperature, Total DPV falls by 1)
+  lm_total_temp <- lm(total_DPV ~ avg_temp, data = dpv_by_manuf_date)
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\weather\\external\\loess_model_total_DPV_temp.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(dpv_by_manuf_date, aes(avg_temp, total_DPV)) + geom_point() + geom_smooth() + 
+       xlab("Average daily temperature") + ylab("Total DPVs") + 
+       theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
+  print(p)
+  dev.off()
+  
+  #Do a linear interpolation plot between daily average humidity and total DPV
+  #Linear model has intercept 7.17334 and slope 0.07396 (For each 13.5 degree F rise in humidity, Total DPV rises by 1)
+  lm_total_humid <- lm(total_DPV ~ avg_humidity, data = dpv_by_manuf_date)
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\weather\\external\\loess_model_total_DPV_humidity.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(dpv_by_manuf_date, aes(avg_humidity, total_DPV)) + geom_point() + geom_smooth() + 
+       xlab("Average daily humidity") + ylab("Total DPVs") + 
+       theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
+  print(p)
+  dev.off()
+
+  dpv_by_manuf_date
+}
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_all_paint_defect_analysis.R")
-#lexus_paint_defects <- load_ics_data() #215,821 rows
+lexus_paint_defects <- load_ics_data() #215,821 rows
 #galc <- load_galc_data()
 #by_portion <- analyze_by_portion(lexus_paint_defects)
 #by_item <- analyze_by_item(lexus_paint_defects)
@@ -344,9 +482,10 @@ analyze_by_day_of_week <- function(lexus_paint_defects)
 #by_discrepancy <- analyze_by_discrepancy(lexus_paint_defects)
 #by_day_of_week <- analyze_by_day_of_week(lexus_paint_defects)
 #by_creation_time <- analyze_by_creation_date_and_shift(lexus_paint_defects)
-#defects_by_manuf_date <- dpv_from_dart_galc(lexus_paint_defects, galc, 40)
-by_creation_time <- analyze_paint_finish_by_creation_date_and_shift(lexus_paint_defects)
-
+#defects_by_manuf_date <- dpv_from_ics_galc(lexus_paint_defects, galc, 40)
+by_creation_time_wide <- analyze_paint_finish_by_creation_date_and_shift(lexus_paint_defects)
+#pf_defects_by_manuf_date <- dpv_for_paint_finish(lexus_paint_defects, galc)
+#dpv_by_manuf_date <- ics_dpvs_vs_external_weather()
 
 
 
