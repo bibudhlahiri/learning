@@ -57,21 +57,28 @@ load_ics_fatal_paint_finish_data <- function(fatal_defects)
   pf_defects <- fatal_defects[(SECTION_NUM == "PF"),]
 }
 
+#35.48% from zone A, 29.86% from zone B, 27.69% from zone C
 analyze_by_zone <- function(pf_defects)
 {
-  library(stringr)
-  #pf_defects[, zone_position_in_portion := as.numeric(str_locate_all(pattern = "ZONE", pf_defects$PORTION)[[1]][,"start"]) - 2]
-  #pf_defects[, zone := substr(pf_defects$PORTION, zone_position_in_portion, zone_position_in_portion)]
-  
-  #pf_defects[, zone_position_in_portion := which(strsplit(pf_defects$PORTION, " ")[[1]] == "ZONE") - 1]
-  #pf_defects[, zone := (strsplit(pf_defects$PORTION, " ")[[1]])[zone_position_in_portion]]
-  
+  library(stringr)  
   system.time(pf_defects[, zone := apply(pf_defects, 1, function(row) get_zone_from_portion(as.character(row["PORTION"])))])
-  #http://stackoverflow.com/questions/18154556/r-split-text-string-in-a-data-table-columns
-  #dt[, c('PX','PY') := do.call(what = Map, args = c(f = c, strsplit(PREFIX, '-')))] #what is a function that needs to be called,
-  #args is the list of arguments for it
-  #pf_defects[, zone_position_in_portion := do.call(Map, args = c(f = c, which(strsplit(PORTION, " ")[[1]] == "ZONE") - 1))]
-  pf_defects[, .SD, .SDcols = c("PORTION", "zone")]
+  by_zone <- pf_defects[, list(n_defects = length(DEFECT_ID)), by = zone]
+  setkey(by_zone, n_defects)
+  by_zone <- by_zone[order(-n_defects)]
+  total_defects <- nrow(pf_defects)
+  by_zone[, percentage := 100*n_defects/total_defects]
+  by_zone$zone <- factor(by_zone$zone, levels = by_zone$zone, ordered = TRUE)
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\paint_finish_fatal_defects_by_zone.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(by_zone[1:10,], aes(x = factor(zone), y = n_defects)) + geom_bar(stat = "identity") + xlab("zone") + 
+       ylab("Number of Lexus paint finish fatal defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
+         theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  dev.off()
+  by_zone
 }
 
 get_zone_from_portion <- function(portion)
@@ -80,14 +87,11 @@ get_zone_from_portion <- function(portion)
   {
     return(NA)
   }
-  #cat(paste("portion = ", portion, "\n", sep = ""))
   portion_split <- strsplit(portion, " ")[[1]]
   zone_position_in_portion <- which(grepl("ZONE", portion_split)) - 1
   raw_zone <- portion_split[zone_position_in_portion]
   parenth_pos <- which(strsplit(raw_zone, "")[[1]] == "(")
   zone <- substr(raw_zone, parenth_pos + 1, parenth_pos + 1)
-  #cat(paste("zone = ", zone, "\n", sep = ""))
-  zone
 }
 
 
@@ -121,7 +125,7 @@ analyze_by_discrepancy <- function(lexus_paint_defects)
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_paint_defect_analysis.R")
 fatal_defects <- load_ics_fatal_defects_data() #209,880 rows
 pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #72,629 rows
-pf_defects <- analyze_by_zone(pf_defects)
+by_zone <- analyze_by_zone(pf_defects)
 
 
 
