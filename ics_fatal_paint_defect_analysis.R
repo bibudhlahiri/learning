@@ -49,6 +49,10 @@ load_ics_fatal_defects_data <- function()
   #Drop data points with REPAIR_TERMINAL == RH_TL_INPUT
   setkey(ics_history, REPAIR_TERMINAL)
   ics_history <- ics_history[(REPAIR_TERMINAL != 'RH_TL_INPUT'),]
+  
+  #Keeping manuf_date for joining with ICS vehicle info table
+  ics_history[, manuf_date := strftime(strptime(ics_history$CREATION_TIME, "%d-%b-%y"), "%Y-%m-%d")]
+  ics_history
 }
 
 load_ics_fatal_paint_finish_data <- function(fatal_defects)
@@ -60,7 +64,6 @@ load_ics_fatal_paint_finish_data <- function(fatal_defects)
 #35.48% from zone A, 29.86% from zone B, 27.69% from zone C
 analyze_by_zone <- function(pf_defects)
 {
-  library(stringr)  
   system.time(pf_defects[, zone := apply(pf_defects, 1, function(row) get_zone_from_portion(as.character(row["PORTION"])))])
   by_zone <- pf_defects[, list(n_defects = length(DEFECT_ID)), by = zone]
   setkey(by_zone, n_defects)
@@ -71,7 +74,7 @@ analyze_by_zone <- function(pf_defects)
   
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\paint_finish_fatal_defects_by_zone.png"
   png(image_file,  width = 600, height = 480, units = "px")
-  p <- ggplot(by_zone[1:10,], aes(x = factor(zone), y = n_defects)) + geom_bar(stat = "identity") + xlab("zone") + 
+  p <- ggplot(by_zone, aes(x = factor(zone), y = n_defects)) + geom_bar(stat = "identity") + xlab("zone") + 
        ylab("Number of Lexus paint finish fatal defects") + 
        theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
          theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
@@ -94,14 +97,40 @@ get_zone_from_portion <- function(portion)
   zone <- substr(raw_zone, parenth_pos + 1, parenth_pos + 1)
 }
 
-
-analyze_by_discrepancy <- function(lexus_paint_defects)
+#37490 from LH (51.69%), 35027 from RH (48.30%)
+analyze_by_location <- function(pf_defects)
 {
-  setkey(lexus_paint_defects, DISCREPANCY)
-  by_discrepancy <- lexus_paint_defects[, list(n_defects = length(DEFECT_ID)), by = DISCREPANCY]
+  pf_defects[, location := substr(pf_defects$PORTION, 1, 2)]
+  setkey(pf_defects, location)
+  pf_defects <- pf_defects[(location != "(C"),]
+  levels(pf_defects$location) <- c('LH', 'RH')
+  by_location <- pf_defects[, list(n_defects = length(DEFECT_ID)), by = location]
+  setkey(by_location, n_defects)
+  by_location <- by_location[order(-n_defects)]
+  total_defects <- nrow(pf_defects)
+  by_location[, percentage := 100*n_defects/total_defects]
+  by_location$location <- factor(by_location$location, levels = by_location$location, ordered = TRUE)
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\paint_finish_fatal_defects_by_location.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(by_location, aes(x = factor(location), y = n_defects)) + geom_bar(stat = "identity") + xlab("location") + 
+       ylab("Number of Lexus paint finish fatal defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
+         theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  dev.off()
+  by_location
+}
+
+#15.89% SEED TC, 9.72% YARN SEED: this has a long tail
+analyze_by_discrepancy <- function(pf_defects)
+{
+  setkey(pf_defects, DISCREPANCY)
+  by_discrepancy <- pf_defects[, list(n_defects = length(DEFECT_ID)), by = DISCREPANCY]
   setkey(by_discrepancy, n_defects)
   by_discrepancy <- by_discrepancy[order(-n_defects)]
-  total_defects <- nrow(lexus_paint_defects)
+  total_defects <- nrow(pf_defects)
   by_discrepancy[, percentage := 100*n_defects/total_defects]
   by_discrepancy$DISCREPANCY <- factor(by_discrepancy$DISCREPANCY, 
                               levels = by_discrepancy$DISCREPANCY,
@@ -121,11 +150,77 @@ analyze_by_discrepancy <- function(lexus_paint_defects)
   by_discrepancy
 }
 
+load_vehicle_info_mv <- function()
+{
+  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICS\\ics_T01ICSGP-Source-TMMK-Lexus-All( Vehcile_shop_Table)\\ICS_VEHICLE_INFO_MV.CSV"
+  #Each VEHICLE_ID appears only once in GALC. Same applies for each VIN_NO.
+  vehicle_info_mv <- fread(filename, header = TRUE, sep = ",", stringsAsFactors = FALSE, showProgress = TRUE, 
+                    colClasses = c("numeric", "character", "numeric", "character", "character", #A-E
+					               "character", "character", "character", "character", "Date", #F-J
+								   "Date", "character", "numeric", "character", "character", #K-O
+								   "numeric", "character", "numeric", "character", "character", #P-T
+								   "character", "character", "character" #U-W
+								   ), data.table = TRUE) #38,545 rows
+								   
+  #Keeping manuf_date for joining with ICS history
+  vehicle_info_mv[, manuf_date := strftime(strptime(vehicle_info_mv$CREATION_TIME, "%d-%b-%y"), "%Y-%m-%d")]
+  #There is a one-to-one mapping between MODEL_NUM 643W and Katashiki value "GSV 60L CETGKA". This is confirmed
+  #from the ICS_VEHICLE_INFO_MV table. ICS+ history has only MODEL_NUM and not Katashiki.
+  setkey(vehicle_info_mv, MODEL_NUM)  
+  vehicle_info_mv <- vehicle_info_mv[(MODEL_NUM == "643W"),]
+  
+  vehicle_info_mv[, day_of_week := weekdays(as.Date(vehicle_info_mv$CREATION_TIME, "%d-%b-%y"))]
+  setkey(vehicle_info_mv, day_of_week)
+  vehicle_info_mv <- vehicle_info_mv[(!(day_of_week %in% c("Saturday", "Sunday"))),]
+  vehicle_info_mv$day_of_week <- factor(vehicle_info_mv$day_of_week, 
+							           levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"),
+                                       ordered = TRUE)
+									   
+  #Start from 1 Oct 2015 as that was the time when ICS+ became operational/stable
+  vehicle_info_mv <- vehicle_info_mv[(as.Date(CREATION_TIME, "%d-%b-%y") >= as.Date("2015-10-01")),]
+}
+
+dpv_for_fatal_defects <- function(fatal_defects, vehicle_info_mv)
+{
+  setkey(fatal_defects, manuf_date)
+  #Same DEFECT_NUM can occur for multiple VEHICLE_IDs. Same VEHICLE_ID can have multiple DEFECT_NUMs.
+  defects_by_manuf_date <- fatal_defects[, list(n_total_defects = length(DEFECT_NUM)), by = manuf_date]  
+  
+  setkey(vehicle_info_mv, manuf_date)
+  #In vehicle_info_mv, each VEHICLE_ID or VIN occurs exactly once
+  vehicles_by_manuf_date <- vehicle_info_mv[, list(n_vehicles = length(VEHICLE_ID)), by = manuf_date]
+  
+  #Combine ICS history and vehicle info data to compute DPV
+  setkey(vehicles_by_manuf_date, manuf_date)
+  setkey(defects_by_manuf_date, manuf_date)
+  defects_by_manuf_date <- defects_by_manuf_date[vehicles_by_manuf_date, nomatch = 0]
+  defects_by_manuf_date[, total_DPV := n_total_defects/n_vehicles] 
+  
+  dpv_filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\documents\\ICS\\DPV_fatal_defects.csv"
+  write.table(defects_by_manuf_date, dpv_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
+    
+  print(fivenum(defects_by_manuf_date$total_DPV)) #1.381188 3.061350 3.920848 5.408284 1028.000000
+    
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\DPV.png"
+  png(image_file, width = 1200, height = 400)
+  defects_by_manuf_date[, manuf_date := as.Date(defects_by_manuf_date$manuf_date, "%Y-%m-%d")]
+  p <- ggplot(defects_by_manuf_date, aes(x = manuf_date, y = total_DPV)) + geom_line() + 
+       scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + xlab("Time") + ylab("Daily DPVs for fatal defects")
+  print(p)
+  aux <- dev.off()
+
+  defects_by_manuf_date
+}
+
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_paint_defect_analysis.R")
 fatal_defects <- load_ics_fatal_defects_data() #209,880 rows
-pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #72,629 rows
-by_zone <- analyze_by_zone(pf_defects)
+#pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #72,629 rows
+#by_zone <- analyze_by_zone(pf_defects)
+#by_location <- analyze_by_location(pf_defects)
+#by_discrepancy <- analyze_by_discrepancy(pf_defects)
+vehicle_info_mv <- load_vehicle_info_mv() #21,488 rows
+defects_by_manuf_date <- dpv_for_fatal_defects(fatal_defects, vehicle_info_mv)
 
 
 
