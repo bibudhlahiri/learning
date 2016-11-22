@@ -298,7 +298,7 @@ analyze_pf_defects_by_interior_color <- function(pf_defects, vehicle_info_mv)
   
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\lexus_paint_defects_by_int_color.png"
   png(image_file,  width = 600, height = 480, units = "px")
-  p <- ggplot(by_int_color[1:10,], aes(x = factor(INTERIOR_COLOR_CODE), y = n_defects)) + geom_bar(stat = "identity") + xlab("Exterior Color Code") + 
+  p <- ggplot(by_int_color[1:10,], aes(x = factor(INTERIOR_COLOR_CODE), y = n_defects)) + geom_bar(stat = "identity") + xlab("Interior Color Code") + 
        ylab("Number of fatal Paint Finish defects") + 
        theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
          theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
@@ -309,17 +309,113 @@ analyze_pf_defects_by_interior_color <- function(pf_defects, vehicle_info_mv)
   pf_defects
 }
 
+#A basic scatterplot of X and Y coordinates of all fatal defects: not very useful
+plot_all_x_y <- function(fatal_defects)
+{
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\fatal_defects_locations.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(fatal_defects, aes(X_COOR, Y_COOR)) + geom_point() + xlab("X-coordinate of defect") + 
+       ylab("Y-coordinate of defect") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold'))
+  print(p)
+  dev.off()
+}
+
+#2D and 3D heatmaps/histograms of number of fatal paint finish defects based on their X and Y coordinates.
+#Observation: most (2997) defects are in 
+plot_pf_defects_x_y <- function(pf_defects, n_cells_x = 10, n_cells_y = 10)
+{
+  library(plot3D)
+  x_c <- cut(pf_defects$X_COOR, n_cells_x)
+  y_c <- cut(pf_defects$Y_COOR, n_cells_y)
+
+  ##  Calculate joint counts at cut levels:
+  z <- table(x_c, y_c)
+
+  ##  Plot as a 3D histogram:
+  image_file <- 
+     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\pf_defects_3D_",
+	       n_cells_x, "_x_", n_cells_y, ".png", sep = "")
+  png(image_file,  width = 600, height = 480, units = "px")
+  hist3D(z = z, border = "black")
+  dev.off()
+
+  ##  Plot as a 2D heatmap:
+  image_file <- 
+     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\pf_defects_2D_",
+	       n_cells_x, "_x_", n_cells_y, ".png", sep = "")
+  png(image_file,  width = 600, height = 480, units = "px")
+  image2D(z = z, border = "black")
+  dev.off()
+  
+  z
+}
+
+analyze_pf_defects_by_x_y_coord <- function(pf_defects)
+{
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\pf_defects_x_coord.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(pf_defects, aes(x = X_COOR)) + geom_histogram() + xlab("X-coordinate of defect") + 
+       ylab("Frequency") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold'))
+  print(p)
+  dev.off()
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\pf_defects_y_coord.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(pf_defects, aes(x = Y_COOR)) + geom_histogram() + xlab("Y-coordinate of defect") + 
+       ylab("Frequency") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold'))
+  print(p)
+  dev.off()
+  
+  #library(mclust)
+  #xyMclust <- Mclust(pf_defects[, .SD, .SDcols = c("X_COOR", "Y_COOR")])
+  #plot(xyMclust)
+  
+  #The cluster centers, and the corresponding number of points in those clusters, are as follows:
+  #    X_COOR   Y_COOR
+  #1 3110.738 2835.760  16925
+  #2 3492.633 9369.620  20366
+  #3 8514.498 3187.083  23919
+  #4 8813.450 9695.872  11419
+  
+  measures <- c()
+  start_k <- 4
+  end_k <- 16
+  for (k in start_k:end_k)
+  {
+    cluster <- kmeans(pf_defects[, .SD, .SDcols = c("X_COOR", "Y_COOR")], centers = k)  
+	measure <- cluster$betweenss/cluster$totss
+	cat(paste("k = ", k, ", betweenss/totss = ", measure, "\n", sep = ""))
+	measures <- c(measures, measure)
+  }
+  cluster_goodness <- data.frame(k = start_k:end_k, measures = measures)
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\cluster_goodness.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(cluster_goodness, aes(x = k, y = measures)) + geom_line() + geom_point() + 
+       xlab("k") + ylab("betweenss/totss")
+  print(p)
+  aux <- dev.off()
+}
+
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_paint_defect_analysis.R")
-fatal_defects <- load_ics_fatal_defects_data() #209,880 rows
-pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #72,629 rows
+#fatal_defects <- load_ics_fatal_defects_data() #209,880 rows
+#pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #72,629 rows
 #by_zone <- analyze_by_zone(pf_defects)
 #by_location <- analyze_by_location(pf_defects)
 #by_discrepancy <- analyze_by_discrepancy(pf_defects)
-vehicle_info_mv <- load_vehicle_info_mv() #21,488 rows
+#vehicle_info_mv <- load_vehicle_info_mv() #21,488 rows
 #pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(pf_defects, vehicle_info_mv, threshold = 10)
 #by_location <- analyze_by_long_location(pf_defects)
 #by_ext_color <- analyze_pf_defects_by_exterior_color(pf_defects, vehicle_info_mv)
 pf_defects <- analyze_pf_defects_by_interior_color(pf_defects, vehicle_info_mv)
-
+#cluster_goodness <- analyze_pf_defects_by_x_y_coord(pf_defects)
+#plot_all_x_y(fatal_defects)
+#z <- plot_pf_defects_x_y(pf_defects, 10, 5)
 
 
