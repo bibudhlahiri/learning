@@ -247,16 +247,79 @@ pf_dpv_for_fatal_defects <- function(pf_defects, vehicle_info_mv, threshold = 10
   pf_defects_by_manuf_date
 }
 
+#1/3rd (8163) of the fatal paint finish defects are from external color 085, 23.5% (5830) are from 1J7.
+analyze_pf_defects_by_exterior_color <- function(pf_defects, vehicle_info_mv)
+{
+  setkey(pf_defects, VEHICLE_ID)
+  setkey(vehicle_info_mv, VEHICLE_ID)
+  pf_defects <- pf_defects[vehicle_info_mv, nomatch = 0]
+  
+  setkey(pf_defects, EXTERIOR_COLOR_CODE)
+  by_ext_color <- pf_defects[, list(n_defects = length(DEFECT_NUM)), by = EXTERIOR_COLOR_CODE]
+  setkey(by_ext_color, n_defects)
+  by_ext_color <- by_ext_color[order(-n_defects)]
+  total_defects <- nrow(pf_defects)
+  by_ext_color[, percentage := 100*n_defects/total_defects]
+  by_ext_color$EXTERIOR_COLOR_CODE <- factor(by_ext_color$EXTERIOR_COLOR_CODE, 
+                              levels = by_ext_color$EXTERIOR_COLOR_CODE,
+                              ordered = TRUE)
+  print(by_ext_color[1:10,])
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\lexus_paint_defects_by_ext_color.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(by_ext_color[1:10,], aes(x = factor(EXTERIOR_COLOR_CODE), y = n_defects)) + geom_bar(stat = "identity") + xlab("Exterior Color Code") + 
+       ylab("Number of fatal Paint Finish defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
+         theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  dev.off()
+  
+  by_ext_color
+}
+
+#16.23% (4028) from LB01, 13.70% (3401) from LA01.
+analyze_pf_defects_by_interior_color <- function(pf_defects, vehicle_info_mv)
+{
+  setkey(pf_defects, VEHICLE_ID)
+  setkey(vehicle_info_mv, VEHICLE_ID)
+  pf_defects <- pf_defects[vehicle_info_mv, nomatch = 0]
+  
+  setkey(pf_defects, INTERIOR_COLOR_CODE)
+  by_int_color <- pf_defects[, list(n_defects = length(DEFECT_NUM)), by = INTERIOR_COLOR_CODE]
+  setkey(by_int_color, n_defects)
+  by_int_color <- by_int_color[order(-n_defects)]
+  total_defects <- nrow(pf_defects)
+  by_int_color[, percentage := 100*n_defects/total_defects]
+  by_int_color$INTERIOR_COLOR_CODE <- factor(by_int_color$INTERIOR_COLOR_CODE, 
+                              levels = by_int_color$INTERIOR_COLOR_CODE,
+                              ordered = TRUE)
+  print(by_int_color[1:10,])
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\lexus_paint_defects_by_int_color.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(by_int_color[1:10,], aes(x = factor(INTERIOR_COLOR_CODE), y = n_defects)) + geom_bar(stat = "identity") + xlab("Exterior Color Code") + 
+       ylab("Number of fatal Paint Finish defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
+         theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  dev.off()
+  
+  pf_defects
+}
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_paint_defect_analysis.R")
 fatal_defects <- load_ics_fatal_defects_data() #209,880 rows
 pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #72,629 rows
 #by_zone <- analyze_by_zone(pf_defects)
 #by_location <- analyze_by_location(pf_defects)
-by_discrepancy <- analyze_by_discrepancy(pf_defects)
-#vehicle_info_mv <- load_vehicle_info_mv() #21,488 rows
+#by_discrepancy <- analyze_by_discrepancy(pf_defects)
+vehicle_info_mv <- load_vehicle_info_mv() #21,488 rows
 #pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(pf_defects, vehicle_info_mv, threshold = 10)
 #by_location <- analyze_by_long_location(pf_defects)
+#by_ext_color <- analyze_pf_defects_by_exterior_color(pf_defects, vehicle_info_mv)
+pf_defects <- analyze_pf_defects_by_interior_color(pf_defects, vehicle_info_mv)
 
 
 
