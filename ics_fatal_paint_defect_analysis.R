@@ -61,7 +61,7 @@ load_ics_fatal_paint_finish_data <- function(fatal_defects)
   pf_defects <- fatal_defects[(SECTION_NUM == "PF"),]
 }
 
-#35.48% from zone A, 29.86% from zone B, 27.69% from zone C
+#35.48% from zone A, 29.86% from zone B, 27.69% from zone S
 analyze_by_zone <- function(pf_defects)
 {
   system.time(pf_defects[, zone := apply(pf_defects, 1, function(row) get_zone_from_portion(as.character(row["PORTION"])))])
@@ -97,7 +97,7 @@ get_zone_from_portion <- function(portion)
   zone <- substr(raw_zone, parenth_pos + 1, parenth_pos + 1)
 }
 
-#37490 from LH (51.69%), 35027 from RH (48.30%)
+#Analyzing by first two characters of PORTION. 37490 from LH (51.69%), 35027 from RH (48.30%)
 analyze_by_location <- function(pf_defects)
 {
   pf_defects[, location := substr(pf_defects$PORTION, 1, 2)]
@@ -114,6 +114,32 @@ analyze_by_location <- function(pf_defects)
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\paint_finish_fatal_defects_by_location.png"
   png(image_file,  width = 600, height = 480, units = "px")
   p <- ggplot(by_location, aes(x = factor(location), y = n_defects)) + geom_bar(stat = "identity") + xlab("location") + 
+       ylab("Number of Lexus paint finish fatal defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
+         theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  dev.off()
+  by_location
+}
+
+#Analyzing by first four characters of PORTION.
+#RH FR: 8405, LH FR: 8031, LH RR: 5934, RH RR: 5785, RH B: 3774 
+analyze_by_long_location <- function(pf_defects)
+{
+  pf_defects[, location := substr(pf_defects$PORTION, 1, 5)]
+  pf_defects <- pf_defects[(!(location %in% c("LH (S", "(C", "LH (A", "RH (B", "LH DO", "LH (B", "RH (S"))),]
+  setkey(pf_defects, location)
+  by_location <- pf_defects[, list(n_defects = length(DEFECT_ID)), by = location]
+  setkey(by_location, n_defects)
+  by_location <- by_location[order(-n_defects)]
+  total_defects <- nrow(pf_defects)
+  by_location[, percentage := 100*n_defects/total_defects]
+  by_location$location <- factor(by_location$location, levels = by_location$location, ordered = TRUE)
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\paint_finish_fatal_defects_by_long_location.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(by_location[1:5,], aes(x = factor(location), y = n_defects)) + geom_bar(stat = "identity") + xlab("Long location") + 
        ylab("Number of Lexus paint finish fatal defects") + 
        theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
          theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
@@ -153,7 +179,7 @@ analyze_by_discrepancy <- function(pf_defects)
 load_vehicle_info_mv <- function()
 {
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICS\\ics_T01ICSGP-Source-TMMK-Lexus-All( Vehcile_shop_Table)\\ICS_VEHICLE_INFO_MV.CSV"
-  #Each VEHICLE_ID appears only once in GALC. Same applies for each VIN_NO.
+  #Each VEHICLE_ID appears only once in ICS_VEHICLE_INFO_MV. Same applies for each VIN_NO.
   vehicle_info_mv <- fread(filename, header = TRUE, sep = ",", stringsAsFactors = FALSE, showProgress = TRUE, 
                     colClasses = c("numeric", "character", "numeric", "character", "character", #A-E
 					               "character", "character", "character", "character", "Date", #F-J
@@ -180,11 +206,11 @@ load_vehicle_info_mv <- function()
   vehicle_info_mv <- vehicle_info_mv[(as.Date(CREATION_TIME, "%d-%b-%y") >= as.Date("2015-10-01")),]
 }
 
-dpv_for_fatal_defects <- function(fatal_defects, vehicle_info_mv)
+pf_dpv_for_fatal_defects <- function(pf_defects, vehicle_info_mv, threshold = 10)
 {
-  setkey(fatal_defects, manuf_date)
+  setkey(pf_defects, manuf_date)
   #Same DEFECT_NUM can occur for multiple VEHICLE_IDs. Same VEHICLE_ID can have multiple DEFECT_NUMs.
-  defects_by_manuf_date <- fatal_defects[, list(n_total_defects = length(DEFECT_NUM)), by = manuf_date]  
+  pf_defects_by_manuf_date <- pf_defects[, list(n_pf_defects = length(DEFECT_NUM)), by = manuf_date]  
   
   setkey(vehicle_info_mv, manuf_date)
   #In vehicle_info_mv, each VEHICLE_ID or VIN occurs exactly once
@@ -192,35 +218,45 @@ dpv_for_fatal_defects <- function(fatal_defects, vehicle_info_mv)
   
   #Combine ICS history and vehicle info data to compute DPV
   setkey(vehicles_by_manuf_date, manuf_date)
-  setkey(defects_by_manuf_date, manuf_date)
-  defects_by_manuf_date <- defects_by_manuf_date[vehicles_by_manuf_date, nomatch = 0]
-  defects_by_manuf_date[, total_DPV := n_total_defects/n_vehicles] 
+  setkey(pf_defects_by_manuf_date, manuf_date)
+  pf_defects_by_manuf_date <- pf_defects_by_manuf_date[vehicles_by_manuf_date, nomatch = 0]
+  pf_defects_by_manuf_date[, pf_dpv := n_pf_defects/n_vehicles] 
   
   dpv_filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\documents\\ICS\\DPV_fatal_defects.csv"
-  write.table(defects_by_manuf_date, dpv_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
+  write.table(pf_defects_by_manuf_date, dpv_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
     
-  print(fivenum(defects_by_manuf_date$total_DPV)) #1.381188 3.061350 3.920848 5.408284 1028.000000
+  print(fivenum(pf_defects_by_manuf_date$pf_dpv)) #0.4653465 1.0584795 1.3524664 1.7261146 407.0000000
     
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\DPV.png"
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\PF_DPV.png"
   png(image_file, width = 1200, height = 400)
-  defects_by_manuf_date[, manuf_date := as.Date(defects_by_manuf_date$manuf_date, "%Y-%m-%d")]
-  p <- ggplot(defects_by_manuf_date, aes(x = manuf_date, y = total_DPV)) + geom_line() + 
-       scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + xlab("Time") + ylab("Daily DPVs for fatal defects")
+  pf_defects_by_manuf_date[, manuf_date := as.Date(pf_defects_by_manuf_date$manuf_date, "%Y-%m-%d")]
+  p <- ggplot(pf_defects_by_manuf_date, aes(x = manuf_date, y = pf_dpv)) + geom_line() + 
+       scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + xlab("Time") + ylab("Daily Paint Finish DPVs for fatal defects")
+  print(p)
+  aux <- dev.off()
+  
+  trunc_pf_defects_by_manuf_date <- pf_defects_by_manuf_date[(pf_dpv <= threshold),]
+  cat(paste("Truncating ", 100*(1 - nrow(trunc_pf_defects_by_manuf_date)/nrow(pf_defects_by_manuf_date)), "% of points", "\n", sep = ""))
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\trunc_PF_DPV.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(trunc_pf_defects_by_manuf_date, aes(x = manuf_date, y = pf_dpv)) + geom_line() + 
+       scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + xlab("Time") + ylab("Daily Paint Finish DPVs for fatal defects (truncated plot)")
   print(p)
   aux <- dev.off()
 
-  defects_by_manuf_date
+  pf_defects_by_manuf_date
 }
 
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_paint_defect_analysis.R")
 fatal_defects <- load_ics_fatal_defects_data() #209,880 rows
-#pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #72,629 rows
+pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #72,629 rows
 #by_zone <- analyze_by_zone(pf_defects)
 #by_location <- analyze_by_location(pf_defects)
-#by_discrepancy <- analyze_by_discrepancy(pf_defects)
-vehicle_info_mv <- load_vehicle_info_mv() #21,488 rows
-defects_by_manuf_date <- dpv_for_fatal_defects(fatal_defects, vehicle_info_mv)
+by_discrepancy <- analyze_by_discrepancy(pf_defects)
+#vehicle_info_mv <- load_vehicle_info_mv() #21,488 rows
+#pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(pf_defects, vehicle_info_mv, threshold = 10)
+#by_location <- analyze_by_long_location(pf_defects)
 
 
 
