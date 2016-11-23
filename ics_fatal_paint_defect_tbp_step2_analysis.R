@@ -125,17 +125,18 @@ load_vehicle_info_mv <- function()
 #Normalize by the number of cars with a given type of exterior color code, otherwise more common 
 #colors will give rise to more defects.
 #Observation: For door opening, highest DPV for 1J4 (0.06320225, 90 defects for 1424 cars), 10th is 1H9 (0.035, 92 defects for 2628 cars)
-analyze_tbp_step2_defects_by_exterior_color <- function(seed_tc_door_opening_data, vehicle_info_mv)
+#Observation: For door, highest DPV for 4X2 (0.05865103, 20 defects for 341 cars), 10th is 1H9 (0.0243, 64 defects for 2628 cars)
+analyze_tbp_step2_defects_by_exterior_color <- function(seed_tc_door_data, vehicle_info_mv)
 {
-  setkey(seed_tc_door_opening_data, VEHICLE_ID)
+  setkey(seed_tc_door_data, VEHICLE_ID)
   setkey(vehicle_info_mv, VEHICLE_ID)
-  seed_tc_door_opening_data <- seed_tc_door_opening_data[vehicle_info_mv, nomatch = 0]
+  seed_tc_door_data <- seed_tc_door_data[vehicle_info_mv, nomatch = 0]
   
   #Get the number of defects by exterior color
-  setkey(seed_tc_door_opening_data, EXTERIOR_COLOR_CODE)
-  by_ext_color <- seed_tc_door_opening_data[, list(n_defects = length(DEFECT_NUM)), by = EXTERIOR_COLOR_CODE]
+  setkey(seed_tc_door_data, EXTERIOR_COLOR_CODE)
+  by_ext_color <- seed_tc_door_data[, list(n_defects = length(DEFECT_NUM)), by = EXTERIOR_COLOR_CODE]
   
-  #Get the production volume by exterior color. We do not do it from seed_tc_door_opening_data because it will only have cars with TBP step 2 defects.
+  #Get the production volume by exterior color. We do not do it from seed_tc_door_data because it will only have cars with TBP step 2 defects.
   prodn_by_ext_color <- vehicle_info_mv[, list(n_cars = length(VEHICLE_ID)), by = EXTERIOR_COLOR_CODE]
   
   setkey(by_ext_color, EXTERIOR_COLOR_CODE)
@@ -152,7 +153,7 @@ analyze_tbp_step2_defects_by_exterior_color <- function(seed_tc_door_opening_dat
                               ordered = TRUE)
   print(by_ext_color[1:10,])
   
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\door_opening\\tbp_step2_defects_by_ext_color.png"
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\door\\tbp_step2_defects_by_ext_color.png"
   png(image_file,  width = 600, height = 480, units = "px")
   p <- ggplot(by_ext_color[1:10,], aes(x = factor(EXTERIOR_COLOR_CODE), y = dpv)) + geom_bar(stat = "identity") + xlab("Exterior Color Code") + 
        ylab("Number of fatal Paint Finish defects") + 
@@ -167,18 +168,21 @@ analyze_tbp_step2_defects_by_exterior_color <- function(seed_tc_door_opening_dat
 
 #Normalize by the number of cars with a given type of interior color code, otherwise more common 
 #colors will give rise to more defects.
-#Observation: For door opening, highest DPV for LC02 (0.2, but 1 defect for 5 cars), 10th is LA20 (0.057, 35 defects for 613 cars)
-analyze_tbp_step2_defects_by_interior_color <- function(seed_tc_door_opening_data, vehicle_info_mv)
+#Observation: For door opening, highest DPV for LC02 (0.2, but 1 defect for 5 cars), 10th is LA20 (0.057, 35 defects for 613 cars),
+#LA10 has 23 defects for 258 cars.
+#Observation: For door, highest DPV for LA02 (0.13, but 2 defects for 15 cars), 10th is LB21 (0.0491, 41 defects for 834 cars),
+#LC23 has 19 defects for 354 cars.
+analyze_tbp_step2_defects_by_interior_color <- function(seed_tc_door_data, vehicle_info_mv)
 {
-  setkey(seed_tc_door_opening_data, VEHICLE_ID)
+  setkey(seed_tc_door_data, VEHICLE_ID)
   setkey(vehicle_info_mv, VEHICLE_ID)
-  seed_tc_door_opening_data <- seed_tc_door_opening_data[vehicle_info_mv, nomatch = 0]
+  seed_tc_door_data <- seed_tc_door_data[vehicle_info_mv, nomatch = 0]
   
   #Get the number of defects by interior color
-  setkey(seed_tc_door_opening_data, INTERIOR_COLOR_CODE)
-  by_int_color <- seed_tc_door_opening_data[, list(n_defects = length(DEFECT_NUM)), by = INTERIOR_COLOR_CODE]
+  setkey(seed_tc_door_data, INTERIOR_COLOR_CODE)
+  by_int_color <- seed_tc_door_data[, list(n_defects = length(DEFECT_NUM)), by = INTERIOR_COLOR_CODE]
   
-  #Get the production volume by interior color. We do not do it from seed_tc_door_opening_data because it will only have cars with TBP step 2 defects.
+  #Get the production volume by interior color. We do not do it from seed_tc_door_data because it will only have cars with TBP step 2 defects.
   prodn_by_int_color <- vehicle_info_mv[, list(n_cars = length(VEHICLE_ID)), by = INTERIOR_COLOR_CODE]
   
   setkey(by_int_color, INTERIOR_COLOR_CODE)
@@ -195,7 +199,7 @@ analyze_tbp_step2_defects_by_interior_color <- function(seed_tc_door_opening_dat
                               ordered = TRUE)
   print(by_int_color[1:10,])
   
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\door_opening\\tbp_step2_defects_by_int_color.png"
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\door\\tbp_step2_defects_by_int_color.png"
   png(image_file,  width = 600, height = 480, units = "px")
   p <- ggplot(by_int_color[1:10,], aes(x = factor(INTERIOR_COLOR_CODE), y = dpv)) + geom_bar(stat = "identity") + xlab("Interior Color Code") + 
        ylab("Number of fatal Paint Finish defects") + 
@@ -224,18 +228,19 @@ plot_all_x_y <- function(seed_tc_door_opening_data)
 #2D and 3D heatmaps/histograms of number of TBP Step 2 defects based on their X and Y coordinates.
 #Observation: For door opening, 304 defects occurred for x in [9220, 10300] and y in [2410, 3560]
 #For door, 196 defects occurred for x in [5480, 6390] and y in [3460, 4610]
-plot_tbp_step2_defects_x_y <- function(seed_tc_door_data, n_cells_x = 10, n_cells_y = 10)
+plot_tbp_step2_defects_x_y <- function(input_data, item = "door_opening", n_cells_x = 10, n_cells_y = 10)
 {
   library(plot3D)
-  x_c <- cut(seed_tc_door_data$X_COOR, n_cells_x)
-  y_c <- cut(seed_tc_door_data$Y_COOR, n_cells_y)
+  x_c <- cut(input_data$X_COOR, n_cells_x)
+  y_c <- cut(input_data$Y_COOR, n_cells_y)
 
   #Calculate joint counts at cut levels:
   z <- table(x_c, y_c)
 
   #Plot as a 3D histogram:
   image_file <- 
-     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\door\\pf_defects_3D_",
+     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\", 
+	        item, "\\pf_defects_3D_",
 	       n_cells_x, "_x_", n_cells_y, ".png", sep = "")
   png(image_file,  width = 600, height = 480, units = "px")
   hist3D(z = z, border = "black")
@@ -243,7 +248,8 @@ plot_tbp_step2_defects_x_y <- function(seed_tc_door_data, n_cells_x = 10, n_cell
 
   #Plot as a 2D heatmap:
   image_file <- 
-     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\door\\pf_defects_2D_",
+     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\",
+	       item, "\\pf_defects_2D_",
 	       n_cells_x, "_x_", n_cells_y, ".png", sep = "")
   png(image_file,  width = 600, height = 480, units = "px")
   image2D(z = z, border = "black")
@@ -259,10 +265,22 @@ plot_tbp_step2_defects_x_y <- function(seed_tc_door_data, n_cells_x = 10, n_cell
   y_max <- as.numeric(gsub("\\]", "", strsplit(y_boundaries_of_max, ",")[[1]][2]))
   cat(paste("Max: ", max(z), " defects occurred for x in [", x_min, ", ", x_max, "] and y in [", y_min, ", ", y_max, "]\n", sep = ""))
   
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\door\\fatal_defects_locations.png"
+  second_max <- max(z[z != max(z)])
+  index_of_second_max <- as.numeric(which(z == second_max, arr.ind = TRUE))
+  x_boundaries_of_second_max <- rownames(z)[index_of_second_max[1]]
+  y_boundaries_of_second_max <- colnames(z)[index_of_second_max[2]]
+  x_min2 <- as.numeric(gsub("\\(", "", strsplit(x_boundaries_of_second_max, ",")[[1]][1]))
+  x_max2 <- as.numeric(gsub("\\]", "", strsplit(x_boundaries_of_second_max, ",")[[1]][2]))
+  y_min2 <- as.numeric(gsub("\\(", "", strsplit(y_boundaries_of_second_max, ",")[[1]][1]))
+  y_max2 <- as.numeric(gsub("\\]", "", strsplit(y_boundaries_of_second_max, ",")[[1]][2]))
+  cat(paste("Second max: ", second_max, " defects occurred for x in [", x_min2, ", ", x_max2, "] and y in [", y_min2, ", ", y_max2, "]\n", sep = ""))
+  
+  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\",
+                 item, "\\fatal_defects_locations.png", sep = "")
   png(image_file,  width = 600, height = 480, units = "px")
-  p <- ggplot(seed_tc_door_opening_data, aes(X_COOR, Y_COOR)) + geom_point() + 
+  p <- ggplot(input_data, aes(X_COOR, Y_COOR)) + geom_point() + 
 	   annotate("rect", xmin = x_min, xmax = x_max, ymin = y_min, ymax = y_max, alpha = 0.5) + 
+	   annotate("rect", xmin = x_min2, xmax = x_max2, ymin = y_min2, ymax = y_max2, alpha = 0.5) + 
 	   xlab("X-coordinate of defect") + ylab("Y-coordinate of defect") + 
        theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
          theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold'))
@@ -279,11 +297,11 @@ fatal_defects <- load_ics_fatal_defects_data() #209,880 rows
 pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #72,629 rows
 seed_tc_door_opening_data <- load_seed_tc_door_opening_data(pf_defects) #3,145 rows
 #seed_tc_door_data <- load_seed_tc_door_data(pf_defects) #2,435 rows
-vehicle_info_mv <- load_vehicle_info_mv() #21,488 rows
-#by_ext_color <- analyze_tbp_step2_defects_by_exterior_color(seed_tc_door_opening_data, vehicle_info_mv)
-by_int_color <- analyze_tbp_step2_defects_by_interior_color(seed_tc_door_opening_data, vehicle_info_mv)
+#vehicle_info_mv <- load_vehicle_info_mv() #21,488 rows
+#by_ext_color <- analyze_tbp_step2_defects_by_exterior_color(seed_tc_door_data, vehicle_info_mv)
+#by_int_color <- analyze_tbp_step2_defects_by_interior_color(seed_tc_door_data, vehicle_info_mv)
 #cluster_goodness <- analyze_pf_defects_by_x_y_coord(pf_defects)
 #plot_all_x_y(seed_tc_door_opening_data)
-#z <- plot_tbp_step2_defects_x_y(seed_tc_door_data, 10, 10)
+z <- plot_tbp_step2_defects_x_y(seed_tc_door_opening_data, item = "door_opening", 10, 10)
 
 
