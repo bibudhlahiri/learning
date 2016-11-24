@@ -100,12 +100,12 @@ pf_dpv_for_fatal_defects <- function(time_window = "year", pf_defects, arc_vehic
     start_date <- as.character(as.Date(end_date) - 6)
 	date_break_freq <- "1 day"
   }
-  if (time_window == "month")
+  else if (time_window == "month")
   {
     start_date <- as.character(as.Date(end_date) - 29)
 	date_break_freq <- "1 week"
   }
-  if (time_window == "year")
+  else #if (time_window == "year")
   {
     start_date <- as.character(as.Date(end_date) - 364)
 	date_break_freq <- "1 month"
@@ -152,11 +152,29 @@ pf_dpv_for_fatal_defects <- function(time_window = "year", pf_defects, arc_vehic
 }
 
 #2D and 3D heatmaps/histograms of number of TBP Step 2 defects based on their X and Y coordinates.
-#Observation: For door opening, 304 defects occurred for x in [9220, 10300] and y in [2410, 3560]
-#For door, 196 defects occurred for x in [5480, 6390] and y in [3460, 4610]
-plot_tbp_step2_defects_x_y <- function(input_data, item = "door_opening", n_cells_x = 10, n_cells_y = 10)
+#Observation: with yearly data, 2285 defects (3.43% of all fatal PF defects) occurred for x in [9440, 10200] and y in [3140, 3930].
+#With monthly data, 234 defects (4.48% of all fatal PF defects) occurred for x in [9380, 10100] and y in [3100, 3870].
+#With weekly data, 45 defects (3.77% of all fatal PF defects) occurred for x in [9380, 10100] and y in [3170, 3940].
+#Conclusion: The fatal paint finish defects are consistently concentrated in this particular region.
+plot_pf_defects_x_y <- function(input_data, time_window = "year", n_cells_x = 15, n_cells_y = 15)
 {
   library(plot3D)
+  end_date <- max(input_data$manuf_date)
+  if (time_window == "week")
+  {
+    start_date <- as.character(as.Date(end_date) - 6)
+  }
+  else if (time_window == "month")
+  {
+    start_date <- as.character(as.Date(end_date) - 29)
+  }
+  else #if (time_window == "year")
+  {
+    start_date <- as.character(as.Date(end_date) - 364)
+  }
+  setkey(input_data, manuf_date)
+  input_data <- input_data[(manuf_date >= start_date),]
+  
   x_c <- cut(input_data$X_COOR, n_cells_x)
   y_c <- cut(input_data$Y_COOR, n_cells_y)
 
@@ -165,23 +183,22 @@ plot_tbp_step2_defects_x_y <- function(input_data, item = "door_opening", n_cell
 
   #Plot as a 3D histogram:
   image_file <- 
-     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\", 
-	        item, "\\pf_defects_3D_",
-	       n_cells_x, "_x_", n_cells_y, ".png", sep = "")
+     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\dashboard\\", 
+	        "\\pf_defects_3D_",
+	        time_window, ".png", sep = "")
   png(image_file,  width = 600, height = 480, units = "px")
   hist3D(z = z, border = "black")
   dev.off()
 
   #Plot as a 2D heatmap:
   image_file <- 
-     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\",
-	       item, "\\pf_defects_2D_",
-	       n_cells_x, "_x_", n_cells_y, ".png", sep = "")
+     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\dashboard\\",
+	       "\\pf_defects_2D_",
+	       time_window, ".png", sep = "")
   png(image_file,  width = 600, height = 480, units = "px")
   image2D(z = z, border = "black")
   dev.off()
   
-  #Draw one or more boxes on a scatterplot of the ITEM based on rectangles obtained from the 2D histogram where most defects occurr
   index_of_max <- as.numeric(which(z == max(z), arr.ind = TRUE))
   x_boundaries_of_max <- rownames(z)[index_of_max[1]]
   y_boundaries_of_max <- colnames(z)[index_of_max[2]]
@@ -189,29 +206,8 @@ plot_tbp_step2_defects_x_y <- function(input_data, item = "door_opening", n_cell
   x_max <- as.numeric(gsub("\\]", "", strsplit(x_boundaries_of_max, ",")[[1]][2]))
   y_min <- as.numeric(gsub("\\(", "", strsplit(y_boundaries_of_max, ",")[[1]][1]))
   y_max <- as.numeric(gsub("\\]", "", strsplit(y_boundaries_of_max, ",")[[1]][2]))
-  cat(paste("Max: ", max(z), " defects occurred for x in [", x_min, ", ", x_max, "] and y in [", y_min, ", ", y_max, "]\n", sep = ""))
-  
-  second_max <- max(z[z != max(z)])
-  index_of_second_max <- as.numeric(which(z == second_max, arr.ind = TRUE))
-  x_boundaries_of_second_max <- rownames(z)[index_of_second_max[1]]
-  y_boundaries_of_second_max <- colnames(z)[index_of_second_max[2]]
-  x_min2 <- as.numeric(gsub("\\(", "", strsplit(x_boundaries_of_second_max, ",")[[1]][1]))
-  x_max2 <- as.numeric(gsub("\\]", "", strsplit(x_boundaries_of_second_max, ",")[[1]][2]))
-  y_min2 <- as.numeric(gsub("\\(", "", strsplit(y_boundaries_of_second_max, ",")[[1]][1]))
-  y_max2 <- as.numeric(gsub("\\]", "", strsplit(y_boundaries_of_second_max, ",")[[1]][2]))
-  cat(paste("Second max: ", second_max, " defects occurred for x in [", x_min2, ", ", x_max2, "] and y in [", y_min2, ", ", y_max2, "]\n", sep = ""))
-  
-  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\fatal_defects\\tbp_step2\\",
-                 item, "\\fatal_defects_locations.png", sep = "")
-  png(image_file,  width = 600, height = 480, units = "px")
-  p <- ggplot(input_data, aes(X_COOR, Y_COOR)) + geom_point() + 
-	   annotate("rect", xmin = x_min, xmax = x_max, ymin = y_min, ymax = y_max, alpha = 0.5) + 
-	   annotate("rect", xmin = x_min2, xmax = x_max2, ymin = y_min2, ymax = y_max2, alpha = 0.5) + 
-	   xlab("X-coordinate of defect") + ylab("Y-coordinate of defect") + 
-       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
-         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold'))
-  print(p)
-  dev.off()
+  cat(paste("Max: ", max(z), " defects (", round(100*max(z)/nrow(input_data), 2), 
+            "% of all fatal PF defects) occurred for x in [", x_min, ", ", x_max, "] and y in [", y_min, ", ", y_max, "]\n", sep = ""))
   
   z
 }
@@ -221,8 +217,8 @@ plot_tbp_step2_defects_x_y <- function(input_data, item = "door_opening", n_cell
 #fatal_defects <- load_ics_fatal_defects_data() #227,242 rows. Date range is 2015-10-01 to 2016-11-23.
 #pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #79,032 rows
 #arc_vehicle_info <- load_arc_vehicle_info() #43,693 rows
-#z <- plot_tbp_step2_defects_x_y(seed_tc_door_opening_data, item = "door_opening", 10, 10)
+z <- plot_pf_defects_x_y(pf_defects, time_window = "week", n_cells_x = 15, n_cells_y = 15)
 
-pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(time_window = "week", pf_defects, arc_vehicle_info)
+#pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(time_window = "year", pf_defects, arc_vehicle_info)
 
 
