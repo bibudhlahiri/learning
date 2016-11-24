@@ -212,13 +212,55 @@ plot_pf_defects_x_y <- function(input_data, time_window = "year", n_cells_x = 15
   z
 }
 
+#As yearly, monthly and weekly data all point to the same region as the highest-defect region, we are analyzing that 
+#region for the entire time (little more than a year).
+analyze_high_defect_region_by_time <- function(input_data, x_min = 9380, x_max = 10100, y_min = 3100, y_max = 3940)
+{
+  setkey(input_data, X_COOR, Y_COOR)
+  input_data <- input_data[(X_COOR >= x_min & X_COOR <= x_max & Y_COOR >= y_min & Y_COOR <= y_max),]
+  print(nrow(input_data))
+  input_data_by_manuf_date <- input_data[, list(n_pf_defects = length(DEFECT_NUM)), by = manuf_date]
+
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\dashboard\\high_defect_region_by_time.png"
+  png(image_file, width = 1200, height = 400)
+  input_data_by_manuf_date[, manuf_date := as.Date(input_data_by_manuf_date$manuf_date, "%Y-%m-%d")]
+  p <- ggplot(input_data_by_manuf_date, aes(x = manuf_date, y = n_pf_defects)) + geom_line(size = 0.5) + 
+       scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + xlab("Time") + ylab("Daily Paint Finish DPVs for fatal defects") + 
+	   theme(axis.text = element_text(colour = 'blue', size = 12, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 12, face = 'bold')) + 
+		 theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  aux <- dev.off()  
+}
+
+analyze_high_defect_region_by_shift <- function(input_data, x_min = 9380, x_max = 10100, y_min = 3100, y_max = 3940)
+{
+  setkey(input_data, X_COOR, Y_COOR)
+  input_data <- input_data[(X_COOR >= x_min & X_COOR <= x_max & Y_COOR >= y_min & Y_COOR <= y_max),]
+  #In the high-defect region, total 1533 defects from shift A (1.34 times shift B), 1137 defects from shift B. 57% from shift A, 43% from shift B.
+  #This is more even that the distribution in overall PF fatal defects data, where 65% come from A, 35% from B.
+  
+  print(table(input_data$RESPONSIBLE_SHIFT))
+  setkey(input_data, CREATION_TIME, RESPONSIBLE_SHIFT)
+  by_creation_time <- input_data[, list(n_defects = length(DEFECT_ID)), by = list(CREATION_TIME, RESPONSIBLE_SHIFT)] 
+  by_creation_time[, manuf_date := as.Date(by_creation_time$CREATION_TIME, "%d-%b-%y")]
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\dashboard\\high_defect_region_by_shift.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(by_creation_time, aes(manuf_date, n_defects)) + geom_line(aes(colour = RESPONSIBLE_SHIFT)) + scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + 
+       xlab("Date") + ylab("No. of paint defects") + theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  aux <- dev.off()
+}
+
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_dashboard.R")
-#fatal_defects <- load_ics_fatal_defects_data() #227,242 rows. Date range is 2015-10-01 to 2016-11-23.
-#pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #79,032 rows
+fatal_defects <- load_ics_fatal_defects_data() #227,242 rows. Date range is 2015-10-01 to 2016-11-23.
+pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #79,032 rows
 #arc_vehicle_info <- load_arc_vehicle_info() #43,693 rows
-z <- plot_pf_defects_x_y(pf_defects, time_window = "week", n_cells_x = 15, n_cells_y = 15)
-
+#z <- plot_pf_defects_x_y(pf_defects, time_window = "week", n_cells_x = 15, n_cells_y = 15)
+#analyze_high_defect_region_by_time(pf_defects)
+analyze_high_defect_region_by_shift(pf_defects)
 #pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(time_window = "year", pf_defects, arc_vehicle_info)
 
 
