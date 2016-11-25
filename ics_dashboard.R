@@ -152,9 +152,9 @@ pf_dpv_for_fatal_defects <- function(time_window = "year", pf_defects, arc_vehic
 }
 
 #2D and 3D heatmaps/histograms of number of TBP Step 2 defects based on their X and Y coordinates.
-#Observation: with yearly data, 2285 defects (3.43% of all fatal PF defects) occurred for x in [9440, 10200] and y in [3140, 3930].
-#With monthly data, 234 defects (4.48% of all fatal PF defects) occurred for x in [9380, 10100] and y in [3100, 3870].
-#With weekly data, 45 defects (3.77% of all fatal PF defects) occurred for x in [9380, 10100] and y in [3170, 3940].
+#Observation: with yearly data, 2209 defects (3.31% of all fatal PF defects) occurred for x in [9600, 10400] and y in [3200, 4000].
+#With monthly data, 221 defects (4.23% of all fatal PF defects) occurred for x in [9600, 10400] and y in [3200, 4000].
+#With weekly data, 49 defects (4.1% of all fatal PF defects) occurred for x in [9600, 10400] and y in [3200, 4000].
 #Conclusion: The fatal paint finish defects are consistently concentrated in this particular region.
 plot_pf_defects_x_y <- function(input_data, time_window = "year", n_cells_x = 15, n_cells_y = 15)
 {
@@ -175,11 +175,14 @@ plot_pf_defects_x_y <- function(input_data, time_window = "year", n_cells_x = 15
   setkey(input_data, manuf_date)
   input_data <- input_data[(manuf_date >= start_date),]
   
-  x_c <- cut(input_data$X_COOR, n_cells_x)
-  y_c <- cut(input_data$Y_COOR, n_cells_y)
+  #cut divides the range of x into intervals and codes the values in x according to which interval they fall.
+  #Range is hard-coded to make sure all subsets of data have the same grid boundaries for a given grid size.
+  #Otherwise, it becomes data-dependent and the boundaries for different time-slices do not match exactly.
+  x_c <- cut(input_data$X_COOR, breaks = seq(0, 12000, length.out = n_cells_x + 1)) #The output of cut() is a factor
+  y_c <- cut(input_data$Y_COOR, breaks = seq(0, 12000, length.out = n_cells_y + 1))
 
   #Calculate joint counts at cut levels:
-  z <- table(x_c, y_c)
+  z <- table(x_c, y_c) #The arguments to table can be factors
 
   #Plot as a 3D histogram:
   image_file <- 
@@ -213,11 +216,18 @@ plot_pf_defects_x_y <- function(input_data, time_window = "year", n_cells_x = 15
 }
 
 #As yearly, monthly and weekly data all point to the same region as the highest-defect region, we are analyzing that 
-#region for the entire time (little more than a year).
-analyze_high_defect_region_by_time <- function(input_data, x_min = 9380, x_max = 10100, y_min = 3100, y_max = 3940)
+#region for last one year.
+analyze_high_defect_region_by_time <- function(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
 {
+  #Take one year's data only to make the number of defects match
+  end_date <- max(input_data$manuf_date)
+  start_date <- as.character(as.Date(end_date) - 364)
+  setkey(input_data, manuf_date)
+  input_data <- input_data[(manuf_date >= start_date),]
+  
   setkey(input_data, X_COOR, Y_COOR)
-  input_data <- input_data[(X_COOR >= x_min & X_COOR <= x_max & Y_COOR >= y_min & Y_COOR <= y_max),]
+  #Note: The left boundary is not part of the interval, the right boundary is.
+  input_data <- input_data[(X_COOR > x_min & X_COOR <= x_max & Y_COOR > y_min & Y_COOR <= y_max),]
   print(nrow(input_data))
   input_data_by_manuf_date <- input_data[, list(n_pf_defects = length(DEFECT_NUM)), by = manuf_date]
 
@@ -233,11 +243,18 @@ analyze_high_defect_region_by_time <- function(input_data, x_min = 9380, x_max =
   aux <- dev.off()  
 }
 
-analyze_high_defect_region_by_shift <- function(input_data, x_min = 9380, x_max = 10100, y_min = 3100, y_max = 3940)
+analyze_high_defect_region_by_shift <- function(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
 {
+  #Take one year's data only to make the number of defects match
+  end_date <- max(input_data$manuf_date)
+  start_date <- as.character(as.Date(end_date) - 364)
+  setkey(input_data, manuf_date)
+  input_data <- input_data[(manuf_date >= start_date),]
+  
   setkey(input_data, X_COOR, Y_COOR)
-  input_data <- input_data[(X_COOR >= x_min & X_COOR <= x_max & Y_COOR >= y_min & Y_COOR <= y_max),]
-  #In the high-defect region, total 1533 defects from shift A (1.34 times shift B), 1137 defects from shift B. 57% from shift A, 43% from shift B.
+  #Note: The left boundary is not part of the interval, the right boundary is.
+  input_data <- input_data[(X_COOR > x_min & X_COOR <= x_max & Y_COOR > y_min & Y_COOR <= y_max),]
+  #In the high-defect region, total 1228 defects from shift A (1.25 times shift B), 981 defects from shift B. 56% from shift A, 44% from shift B.
   #This is more even that the distribution in overall PF fatal defects data, where 65% come from A, 35% from B.
   
   print(table(input_data$RESPONSIBLE_SHIFT))
@@ -247,8 +264,10 @@ analyze_high_defect_region_by_shift <- function(input_data, x_min = 9380, x_max 
   
   image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\dashboard\\high_defect_region_by_shift.png"
   png(image_file, width = 1200, height = 400)
-  p <- ggplot(by_creation_time, aes(manuf_date, n_defects)) + geom_line(aes(colour = RESPONSIBLE_SHIFT)) + scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + 
-       xlab("Date") + ylab("No. of paint defects") + theme(axis.text.x = element_text(angle = 90))
+  p <- ggplot(by_creation_time, aes(manuf_date, n_defects)) + geom_line(aes(colour = RESPONSIBLE_SHIFT), size = 0.5) + scale_x_date(date_breaks = "1 month", date_labels = "%d-%b-%Y") + 
+       xlab("Date") + ylab("No. of paint defects") + 
+	   theme(axis.text = element_text(colour = 'blue', size = 12, face = 'bold')) +
+       theme(axis.title = element_text(colour = 'red', size = 12, face = 'bold')) + theme(axis.text.x = element_text(angle = 90))
   print(p)
   aux <- dev.off()
 }
@@ -259,7 +278,7 @@ fatal_defects <- load_ics_fatal_defects_data() #227,242 rows. Date range is 2015
 pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #79,032 rows
 #arc_vehicle_info <- load_arc_vehicle_info() #43,693 rows
 #z <- plot_pf_defects_x_y(pf_defects, time_window = "week", n_cells_x = 15, n_cells_y = 15)
-#analyze_high_defect_region_by_time(pf_defects)
+analyze_high_defect_region_by_time(pf_defects)
 analyze_high_defect_region_by_shift(pf_defects)
 #pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(time_window = "year", pf_defects, arc_vehicle_info)
 
