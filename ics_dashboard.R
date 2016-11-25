@@ -272,14 +272,168 @@ analyze_high_defect_region_by_shift <- function(input_data, x_min = 9600, x_max 
   aux <- dev.off()
 }
 
+#Website to order data is: https://www7.ncdc.noaa.gov/CDO/cdoselect.cmd
+#Data file is available at: http://www.ncdc.noaa.gov/orders/isd/5620597190494dat.txt
+#Order details are at: https://www.ncdc.noaa.gov/orders/isd/CDO5620597190494.html
+load_external_weather_data <- function()
+{
+  filename <- 
+  "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\weather\\cincinnati_weather.txt"
+  weather <- fread(filename, header = TRUE, sep = " ", stringsAsFactors = FALSE, showProgress = TRUE, 
+                    colClasses = c("numeric", "numeric", "character", "character", "character",
+					               "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character", "character", "character",
+								   "character", "character", "character"
+								   ), data.table = TRUE)
+  cols_to_retain <- c("YR--MODAHRMN", "TEMP", "DEWP")
+  weather <- weather[, .SD, .SDcols = cols_to_retain]
+  weather[, date_captured := substr(weather[['YR--MODAHRMN']], 1, 8)]
+  weather <- weather[((TEMP != "****") & (DEWP != "****")),]
+  weather$TEMP <- as.numeric(weather$TEMP)
+  weather$DEWP <- as.numeric(weather$DEWP)
+  weather[, humidity := (DEWP - TEMP)]
+  weather[, date_captured := paste(substr(date_captured, 1, 4), "-", substr(date_captured, 5, 6), "-", 
+                                           substr(date_captured, 7, 8), sep = "")]
+  setkey(weather, date_captured)
+  weather_by_date <- weather[, list(avg_temp = mean(TEMP),
+                                    avg_humidity = mean(humidity)), by = date_captured]
+}
+
+analyze_high_defect_region_by_temperature <- function(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
+{
+  #Take one year's data only to make the number of defects match
+  end_date <- max(input_data$manuf_date)
+  start_date <- as.character(as.Date(end_date) - 364)
+  setkey(input_data, manuf_date)
+  input_data <- input_data[(manuf_date >= start_date),]
+  
+  setkey(input_data, X_COOR, Y_COOR)
+  #Note: The left boundary is not part of the interval, the right boundary is.
+  input_data <- input_data[(X_COOR > x_min & X_COOR <= x_max & Y_COOR > y_min & Y_COOR <= y_max),]
+  
+  setkey(input_data, manuf_date)
+  defects_by_date <- input_data[, list(n_defects = length(DEFECT_NUM)), by = manuf_date]
+  
+  weather_by_date <- load_external_weather_data()
+  setkey(weather_by_date, date_captured)
+  defects_by_date <- defects_by_date[weather_by_date, nomatch = 0]
+  
+  print(cor(defects_by_date$avg_temp, defects_by_date$n_defects)) #-0.1644567 when we focus on the high-defect region.
+  #However, overall fatal Paint Finish defects has a correlation coeff of -0.4033189. That means defects in this region
+  #are concentrated for some other reason as well. 
+  #lm(n_defects ~ avg_temp, data = defects_by_date) Intercept 11.74982, slope -0.04605
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\dashboard\\high_defect_region_by_temperature.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(defects_by_date, aes(avg_temp, n_defects)) + geom_point() + geom_smooth(method = "lm") + 
+       xlab("Average daily temperature") + ylab("Total fatal paint finish defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
+  print(p)
+  dev.off()
+  
+  defects_by_date
+}
+
+#Total number of defects vs temperature does not show a very strong trend, so try DPV instead.
+analyze_dpv_for_high_defect_region_by_temperature <- function(input_data, arc_vehicle_info, x_min = 9600, x_max = 10400, 
+                                                              y_min = 3200, y_max = 4000)
+{
+  #Take one year's data only to make the number of defects match
+  end_date <- max(input_data$manuf_date)
+  start_date <- as.character(as.Date(end_date) - 364)
+  setkey(input_data, manuf_date)
+  input_data <- input_data[(manuf_date >= start_date),]
+  
+  setkey(input_data, X_COOR, Y_COOR)
+  #Note: The left boundary is not part of the interval, the right boundary is.
+  input_data <- input_data[(X_COOR > x_min & X_COOR <= x_max & Y_COOR > y_min & Y_COOR <= y_max),]
+  
+  setkey(input_data, manuf_date)
+  defects_by_date <- input_data[, list(n_defects = length(DEFECT_NUM)), by = manuf_date]
+  
+  setkey(arc_vehicle_info, manuf_date)
+  arc_vehicle_info <- arc_vehicle_info[(manuf_date >= start_date),] 
+  
+  #In arc_vehicle_info, each VEHICLE_ID or VIN occurs exactly once
+  vehicles_by_manuf_date <- arc_vehicle_info[, list(n_vehicles = length(VEHICLE_ID)), by = manuf_date]
+  
+  #Combine PF fatal defects and vehicle info data to compute DPV
+  setkey(vehicles_by_manuf_date, manuf_date)
+  setkey(defects_by_date, manuf_date)
+  defects_by_date <- defects_by_date[vehicles_by_manuf_date, nomatch = 0]
+  defects_by_date[, pf_dpv := n_defects/n_vehicles] 
+  
+  weather_by_date <- load_external_weather_data()
+  setkey(weather_by_date, date_captured)
+  defects_by_date <- defects_by_date[weather_by_date, nomatch = 0]
+  
+  print(cor(defects_by_date$avg_temp, defects_by_date$pf_dpv)) #-0.2268994 when we focus on the high-defect region.
+  #However, overall fatal Paint Finish DPV has a correlation coeff of -0.3847753. That means defects in this region
+  #are concentrated for some other reason as well. 
+  #lm(pf_dpv ~ avg_temp, data = defects_by_date) Intercept 0.0875062, slope -0.0005156
+  
+  image_file <- 
+  "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\dashboard\\dpv_for_high_defect_region_by_temperature.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(defects_by_date, aes(avg_temp, pf_dpv)) + geom_point() + geom_smooth(method = "lm") + 
+       xlab("Average daily temperature") + ylab("DPV for fatal paint finish defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
+  print(p)
+  dev.off()
+  
+  defects_by_date
+}
+
+analyze_high_defect_region_by_humidity <- function(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
+{
+  #Take one year's data only to make the number of defects match
+  end_date <- max(input_data$manuf_date)
+  start_date <- as.character(as.Date(end_date) - 364)
+  setkey(input_data, manuf_date)
+  input_data <- input_data[(manuf_date >= start_date),]
+  
+  setkey(input_data, X_COOR, Y_COOR)
+  #Note: The left boundary is not part of the interval, the right boundary is.
+  input_data <- input_data[(X_COOR > x_min & X_COOR <= x_max & Y_COOR > y_min & Y_COOR <= y_max),]
+  
+  setkey(input_data, manuf_date)
+  defects_by_date <- input_data[, list(n_defects = length(DEFECT_NUM)), by = manuf_date]
+  
+  weather_by_date <- load_external_weather_data()
+  setkey(weather_by_date, date_captured)
+  defects_by_date <- defects_by_date[weather_by_date, nomatch = 0]
+  
+  print(cor(defects_by_date$avg_humidity, defects_by_date$n_defects)) #-0.04532517 when we focus on the high-defect region.
+  #However, overall fatal Paint Finish defects has a correlation coeff of 0.07895822 (note the change of sign). Both correlation 
+  #coefficients are negligible.
+  print(lm(n_defects ~ avg_humidity, data = defects_by_date)) #Intercept 8.67052, slope -0.04159
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\dashboard\\high_defect_region_by_humidity.png"
+  png(image_file,  width = 1200, height = 960, units = "px")
+  p <- ggplot(defects_by_date, aes(avg_temp, n_defects)) + geom_point() + geom_smooth(method = "lm") + 
+       xlab("Average daily humidity") + ylab("Total fatal paint finish defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 20, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 20, face = 'bold'))
+  print(p)
+  dev.off()
+  
+  defects_by_date
+}
+
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_dashboard.R")
 fatal_defects <- load_ics_fatal_defects_data() #227,242 rows. Date range is 2015-10-01 to 2016-11-23.
 pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #79,032 rows
-#arc_vehicle_info <- load_arc_vehicle_info() #43,693 rows
+arc_vehicle_info <- load_arc_vehicle_info() #43,693 rows
 #z <- plot_pf_defects_x_y(pf_defects, time_window = "week", n_cells_x = 15, n_cells_y = 15)
-analyze_high_defect_region_by_time(pf_defects)
-analyze_high_defect_region_by_shift(pf_defects)
+#analyze_high_defect_region_by_time(pf_defects)
+#analyze_high_defect_region_by_shift(pf_defects)
 #pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(time_window = "year", pf_defects, arc_vehicle_info)
-
-
+#defects_by_date <- analyze_high_defect_region_by_temperature(pf_defects)
+#defects_by_date <- analyze_dpv_for_high_defect_region_by_temperature(pf_defects, arc_vehicle_info)
+defects_by_date <- analyze_high_defect_region_by_humidity(pf_defects)
