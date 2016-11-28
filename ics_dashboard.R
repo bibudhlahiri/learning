@@ -184,20 +184,49 @@ plot_pf_defects_x_y <- function(input_data, time_window = "year", n_cells_x = 15
   #Calculate joint counts at cut levels:
   z <- table(x_c, y_c) #The arguments to table can be factors
 
-  #Plot as a 3D histogram:
-  image_file <- 
-     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\dashboard\\", 
-	        "\\pf_defects_3D_",
-	        time_window, ".png", sep = "")
-  png(image_file,  width = 600, height = 480, units = "px")
-  hist3D(z = z, border = "black")
-  dev.off()
-
   #Plot as a 2D heatmap:
   image_file <- 
      paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\dashboard\\",
 	       "\\pf_defects_2D_",
 	       time_window, ".png", sep = "")
+  png(image_file,  width = 600, height = 480, units = "px")
+  image2D(z = z, border = "black")
+  dev.off()
+  
+  index_of_max <- as.numeric(which(z == max(z), arr.ind = TRUE))
+  x_boundaries_of_max <- rownames(z)[index_of_max[1]]
+  y_boundaries_of_max <- colnames(z)[index_of_max[2]]
+  x_min <- as.numeric(gsub("\\(", "", strsplit(x_boundaries_of_max, ",")[[1]][1]))
+  x_max <- as.numeric(gsub("\\]", "", strsplit(x_boundaries_of_max, ",")[[1]][2]))
+  y_min <- as.numeric(gsub("\\(", "", strsplit(y_boundaries_of_max, ",")[[1]][1]))
+  y_max <- as.numeric(gsub("\\]", "", strsplit(y_boundaries_of_max, ",")[[1]][2]))
+  cat(paste("Max: ", max(z), " defects (", round(100*max(z)/nrow(input_data), 2), 
+            "% of all fatal PF defects) occurred for x in [", x_min, ", ", x_max, "] and y in [", y_min, ", ", y_max, "]\n", sep = ""))
+  
+  z
+}
+
+
+plot_pf_defects_x_y_for_date_range <- function(input_data, start_date = "2015-11-25", end_date = "2015-12-24", n_cells_x = 15, n_cells_y = 15)
+{
+  library(plot3D)
+  setkey(input_data, manuf_date)
+  input_data <- input_data[((manuf_date >= start_date) & (manuf_date <= end_date)),]
+  
+  #cut divides the range of x into intervals and codes the values in x according to which interval they fall.
+  #Range is hard-coded to make sure all subsets of data have the same grid boundaries for a given grid size.
+  #Otherwise, it becomes data-dependent and the boundaries for different time-slices do not match exactly.
+  x_c <- cut(input_data$X_COOR, breaks = seq(0, 12000, length.out = n_cells_x + 1)) #The output of cut() is a factor
+  y_c <- cut(input_data$Y_COOR, breaks = seq(0, 12000, length.out = n_cells_y + 1))
+
+  #Calculate joint counts at cut levels:
+  z <- table(x_c, y_c) #The arguments to table can be factors
+
+  #Plot as a 2D heatmap:
+  image_file <- 
+     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\dashboard\\",
+	       "\\pf_defects_2D_",
+	       start_date, "_", end_date, ".png", sep = "")
   png(image_file,  width = 600, height = 480, units = "px")
   image2D(z = z, border = "black")
   dev.off()
@@ -300,6 +329,28 @@ load_external_weather_data <- function()
   setkey(weather, date_captured)
   weather_by_date <- weather[, list(avg_temp = mean(TEMP),
                                     avg_humidity = mean(humidity)), by = date_captured]
+}
+
+#Extracted selected columns from the raw file in Linux. 
+#Applied this twice to get rid of the headers: sed '1d' 5620597190494dat.txt > tmpfile; mv tmpfile 5620597190494dat.txt
+#wc -l 5620597190494dat.txt gives 14147 lines
+#awk -F ' ' '{print $3, $4, $20,  $22}' 5620597190494dat.txt > weather2.txt
+#wc -l  weather2.txt gives 14147 lines
+load_external_weather_data2 <- function()
+{
+  filename <- 
+  "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\weather\\weather2.txt"
+  weather <- fread(filename, header = FALSE, sep = " ", stringsAsFactors = FALSE, showProgress = TRUE, 
+                colClasses = c("character", "character", "numeric", "numeric"), data.table = TRUE)
+  setnames(weather, c("date_captured", "HrMn", "TEMP", "DEWP"))
+  weather <- weather[((TEMP != 999.9) & (DEWP != 9999.9)),]
+  weather[, humidity := (DEWP - TEMP)]
+  weather[, date_captured := paste(substr(date_captured, 1, 4), "-", substr(date_captured, 5, 6), "-", 
+                                           substr(date_captured, 7, 8), sep = "")]
+  setkey(weather, date_captured)
+  weather_by_date <- weather[, list(avg_temp = mean(TEMP),
+                                    avg_humidity = mean(humidity)), by = date_captured]
+  weather
 }
 
 analyze_high_defect_region_by_temperature <- function(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
@@ -427,13 +478,15 @@ analyze_high_defect_region_by_humidity <- function(input_data, x_min = 9600, x_m
 
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_dashboard.R")
-fatal_defects <- load_ics_fatal_defects_data() #227,242 rows. Date range is 2015-10-01 to 2016-11-23.
-pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #79,032 rows
-arc_vehicle_info <- load_arc_vehicle_info() #43,693 rows
+#fatal_defects <- load_ics_fatal_defects_data() #227,242 rows. Date range is 2015-10-01 to 2016-11-23.
+#pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #79,032 rows
+#arc_vehicle_info <- load_arc_vehicle_info() #43,693 rows
 #z <- plot_pf_defects_x_y(pf_defects, time_window = "week", n_cells_x = 15, n_cells_y = 15)
 #analyze_high_defect_region_by_time(pf_defects)
 #analyze_high_defect_region_by_shift(pf_defects)
 #pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(time_window = "year", pf_defects, arc_vehicle_info)
 #defects_by_date <- analyze_high_defect_region_by_temperature(pf_defects)
 #defects_by_date <- analyze_dpv_for_high_defect_region_by_temperature(pf_defects, arc_vehicle_info)
-defects_by_date <- analyze_high_defect_region_by_humidity(pf_defects)
+#defects_by_date <- analyze_high_defect_region_by_humidity(pf_defects)
+#plot_pf_defects_x_y_for_date_range(pf_defects, start_date = "2016-04-25", end_date = "2016-05-24", n_cells_x = 15, n_cells_y = 15)
+weather <- load_external_weather_data2()
