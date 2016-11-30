@@ -168,6 +168,60 @@ plot_pf_defects_x_y <- function(input_data, time_window = "year", n_cells_x = 15
   z
 }
 
+#This method is for digging deeper into the region that showed maximum number of defects in plot_pf_defects_x_y(). 
+#We do this for the one-year time-slice only as otherwise we have too few defects.
+plot_pf_defects_x_y_second_level <- function(input_data, 
+                                             x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000, 
+											 n_cells_x = 15, n_cells_y = 15)
+{
+  library(plot3D)
+  end_date <- max(input_data$manuf_date)
+  start_date <- as.character(as.Date(end_date) - 364)
+  input_data <- input_data %>% filter(manuf_date >= start_date)
+  
+  #Note: The left boundary is not part of the interval, the right boundary is.
+  input_data <- input_data %>% filter(X_COOR > x_min & X_COOR <= x_max & Y_COOR > y_min & Y_COOR <= y_max)  
+  print(nrow(input_data))
+  #cut divides the range of x into intervals and codes the values in x according to which interval they fall.
+  #Range is hard-coded to make sure all subsets of data have the same grid boundaries for a given grid size.
+  #Otherwise, it becomes data-dependent and the boundaries for different time-slices do not match exactly.
+  x_c <- cut(input_data$X_COOR, breaks = seq(x_min, x_max, length.out = n_cells_x + 1)) 
+  #Note: The arguments to seq() are not hard-coded any more, unlike plot_pf_defects_x_y()
+  y_c <- cut(input_data$Y_COOR, breaks = seq(y_min, y_max, length.out = n_cells_y + 1))
+
+  z <- table(x_c, y_c)
+
+  #Plot as a 2D heatmap:
+  image_file <- 
+     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\post_tara_feedback\\pf_defects_2D_second_level_",
+	       n_cells_x, "x", n_cells_y, ".png", sep = "")
+  png(image_file,  width = 600, height = 480, units = "px")
+  image2D(z = z, border = "black")
+  dev.off()
+  
+  #Plot as a 2D contour:
+  image_file <- 
+     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\post_tara_feedback\\pf_defects_contour_second_level_",
+	       n_cells_x, "x", n_cells_y, ".png", sep = "")
+  png(image_file,  width = 600, height = 480, units = "px")
+  contour2D(z)
+  #image2D(z = z, rasterImage = TRUE)
+  #image2D(z = z, clab = "m")
+  dev.off()
+  
+  index_of_max <- as.numeric(which(z == max(z), arr.ind = TRUE))
+  x_boundaries_of_max <- rownames(z)[index_of_max[1]]
+  y_boundaries_of_max <- colnames(z)[index_of_max[2]]
+  x_min <- as.numeric(gsub("\\(", "", strsplit(x_boundaries_of_max, ",")[[1]][1]))
+  x_max <- as.numeric(gsub("\\]", "", strsplit(x_boundaries_of_max, ",")[[1]][2]))
+  y_min <- as.numeric(gsub("\\(", "", strsplit(y_boundaries_of_max, ",")[[1]][1]))
+  y_max <- as.numeric(gsub("\\]", "", strsplit(y_boundaries_of_max, ",")[[1]][2]))
+  cat(paste("Max: ", max(z), " defects (", round(100*max(z)/nrow(input_data), 2), 
+            "% of all fatal PF defects) occurred for x in [", x_min, ", ", x_max, "] and y in [", y_min, ", ", y_max, "]\n", sep = ""))
+  
+  z
+}
+
 #As yearly, monthly and weekly data all point to the same region as the highest-defect region, we are analyzing that 
 #region for last one year.
 analyze_high_defect_region_by_time <- function(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
@@ -386,7 +440,8 @@ analyze_high_defect_region_by_humidity <- function(input_data, x_min = 9600, x_m
 #z <- plot_pf_defects_x_y(pf_defects, time_window = "week", n_cells_x = 15, n_cells_y = 15)
 #input_data_by_manuf_date <- analyze_high_defect_region_by_time(pf_defects)
 #analyze_high_defect_region_by_shift(pf_defects)
-pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(time_window = "week", pf_defects, arc_vehicle_info)
+#pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(time_window = "week", pf_defects, arc_vehicle_info)
+z <- plot_pf_defects_x_y_second_level(pf_defects, n_cells_x = 10, n_cells_y = 10)
 #defects_by_date <- analyze_high_defect_region_by_temperature(pf_defects)
 #defects_by_date <- analyze_dpv_for_high_defect_region_by_temperature(pf_defects, arc_vehicle_info)
 #defects_by_date <- analyze_high_defect_region_by_humidity(pf_defects)
