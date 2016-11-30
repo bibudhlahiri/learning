@@ -222,7 +222,8 @@ plot_pf_defects_x_y_second_level <- function(input_data,
   cat(paste("Max: ", max(z), " defects (", round(100*max(z)/nrow(input_data), 2), 
             "% of the fatal PF defects in the high-defect region) occurred for x in [", x_min, ", ", x_max, "] and y in [", y_min, ", ", y_max, "]\n", sep = ""))
   
-  z
+  #z
+  input_data
 }
 
 #As yearly, monthly and weekly data all point to the same region as the highest-defect region, we are analyzing that 
@@ -295,9 +296,119 @@ load_external_weather_data <- function()
   weather <- weather %>% filter((TEMP != 999.9) & (DEWP != 9999.9) & (DEWP != 999.9))
   weather$humidity <- (DEWP - TEMP)
   weather$date_captured <- paste(substr(weather$date_captured, 1, 4), "-", substr(weather$date_captured, 5, 6), "-", 
-                                           substr(weather$date_captured, 7, 8), sep = "")]
+                                           substr(weather$date_captured, 7, 8), sep = "")
   weather_by_date <- weather %>% select(date_captured, TEMP, humidity) %>% group_by(date_captured) %>% 
                      summarise(avg_temp = mean(TEMP), avg_humidity = mean(humidity))
+}
+
+#84.86% defects in the high-defect region are from QTR PANEL. There are only 3 values of item: QTR PANEL, DOOR OPENING (14.65%) and C PILLAR.
+#So, 99.5% of the defects in this region are coming from these two.
+analyze_by_item <- function(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
+{
+  end_date <- max(input_data$manuf_date)
+  start_date <- as.character(as.Date(end_date) - 364)
+  input_data <- input_data %>% filter(manuf_date >= start_date)
+  
+  #Note: The left boundary is not part of the interval, the right boundary is.
+  input_data <- input_data %>% filter(X_COOR > x_min & X_COOR <= x_max & Y_COOR > y_min & Y_COOR <= y_max)
+  
+  by_item <- input_data %>% select(ITEM, DEFECT_ID) %>% group_by(ITEM) %>% summarise(n_defects = length(DEFECT_ID))
+  by_item <- by_item[with(by_item, order(-n_defects)),]
+  
+  total_defects <- nrow(input_data)
+  by_item$percentage <- 100*(by_item$n_defects/total_defects)
+  print(by_item)
+  by_item$ITEM <- factor(by_item$ITEM, 
+                              levels = by_item$ITEM,
+                              ordered = TRUE)
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\post_tara_feedback\\high_defect_region_by_item.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(by_item, aes(x = factor(ITEM), y = n_defects)) + geom_bar(stat = "identity") + xlab("Item") + 
+       ylab("#Fatal PF defects in max-defect region") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
+         theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  dev.off()
+  
+  by_item
+}
+
+#48% are from LH (A ZONE RR [SO]), 17% are from LH (S ZONE FR [SO]), 16.59% from LH (S ZONE RR [SO]) and 12.64% are 
+#from LH DOGLEG (A ZONE[SO]. These comprise of 94.5% defects in the high-defect region. All of them are from LH and not RH.
+analyze_by_portion <- function(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
+{
+  end_date <- max(input_data$manuf_date)
+  start_date <- as.character(as.Date(end_date) - 364)
+  input_data <- input_data %>% filter(manuf_date >= start_date)
+  
+  #Note: The left boundary is not part of the interval, the right boundary is.
+  input_data <- input_data %>% filter(X_COOR > x_min & X_COOR <= x_max & Y_COOR > y_min & Y_COOR <= y_max)
+  
+  by_portion <- input_data %>% select(PORTION, DEFECT_ID) %>% group_by(PORTION) %>% summarise(n_defects = length(DEFECT_ID))
+  by_portion <- by_portion[with(by_portion, order(-n_defects)),]
+  
+  total_defects <- nrow(input_data)
+  by_portion$percentage <- 100*(by_portion$n_defects/total_defects)
+  by_portion$PORTION <- factor(by_portion$PORTION, 
+                              levels = by_portion$PORTION,
+                              ordered = TRUE)
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\post_tara_feedback\\high_defect_region_by_portion.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(by_portion, aes(x = factor(PORTION), y = n_defects)) + geom_bar(stat = "identity") + xlab("Portion") + 
+       ylab("#Fatal PF defects in max-defect region") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
+         theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  dev.off()
+  
+  by_portion
+}
+
+#945 (66%) from zone A, 495 (34%) from zone S
+analyze_by_zone <- function(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
+{
+  end_date <- max(input_data$manuf_date)
+  start_date <- as.character(as.Date(end_date) - 364)
+  input_data <- input_data %>% filter(manuf_date >= start_date)
+  
+  #Note: The left boundary is not part of the interval, the right boundary is.
+  input_data <- input_data %>% filter(X_COOR > x_min & X_COOR <= x_max & Y_COOR > y_min & Y_COOR <= y_max)
+  
+  input_data$zone <- apply(input_data, 1, function(row) get_zone_from_portion(as.character(row["PORTION"])))
+  by_zone <- input_data %>% select(zone, DEFECT_ID) %>% group_by(zone) %>% summarise(n_defects = length(DEFECT_ID))
+  by_zone <- by_zone[with(by_zone, order(-n_defects)),]
+  
+  total_defects <- nrow(input_data)
+  by_zone$percentage <- 100*(by_zone$n_defects/total_defects)
+  by_zone$zone <- factor(by_zone$zone, levels = by_zone$zone, ordered = TRUE)
+  print(by_zone)
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\post_tara_feedback\\high_defect_region_by_zone.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(by_zone, aes(x = factor(zone), y = n_defects)) + geom_bar(stat = "identity") + xlab("zone") + 
+       ylab("#Fatal PF defects in max-defect region") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) 
+  print(p)
+  dev.off()
+  by_zone
+}
+
+get_zone_from_portion <- function(portion)
+{
+  if (!grepl("ZONE", portion))
+  {
+    return(NA)
+  }
+  portion_split <- strsplit(portion, " ")[[1]]
+  zone_position_in_portion <- which(grepl("ZONE", portion_split)) - 1
+  raw_zone <- portion_split[zone_position_in_portion]
+  parenth_pos <- which(strsplit(raw_zone, "")[[1]] == "(")
+  zone <- substr(raw_zone, parenth_pos + 1, parenth_pos + 1)
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_post_tara_feedback.R")
@@ -306,10 +417,10 @@ load_external_weather_data <- function()
 #arc_vehicle_info <- load_arc_vehicle_info() #43,693 rows
 #z <- plot_pf_defects_x_y(pf_defects, time_window = "week", n_cells_x = 15, n_cells_y = 15)
 #input_data_by_manuf_date <- analyze_high_defect_region_by_time(pf_defects)
-analyze_high_defect_region_by_shift(pf_defects)
+#analyze_high_defect_region_by_shift(pf_defects)
 #pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(time_window = "week", pf_defects, arc_vehicle_info)
-#z <- plot_pf_defects_x_y_second_level(pf_defects, n_cells_x = 10, n_cells_y = 10)
-#defects_by_date <- analyze_high_defect_region_by_temperature(pf_defects)
-#defects_by_date <- analyze_dpv_for_high_defect_region_by_temperature(pf_defects, arc_vehicle_info)
-#defects_by_date <- analyze_high_defect_region_by_humidity(pf_defects)
-#weather_by_date <- load_external_weather_data2()
+#input_data <- plot_pf_defects_x_y_second_level(pf_defects, n_cells_x = 10, n_cells_y = 10)
+#by_item <- analyze_by_item(pf_defects, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
+#by_portion <- analyze_by_portion(pf_defects, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
+by_zone <- analyze_by_zone(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
+
