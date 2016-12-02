@@ -92,7 +92,7 @@ pf_dpv_for_fatal_defects <- function(time_window = "year", pf_defects, arc_vehic
     
   print(fivenum(pf_defects_by_manuf_date$pf_dpv)) #For time_window = "year", 0.04379562 0.76237624 1.01273885 1.28333333 4.21126761: variance is highest
   #For time_window = "month", 0.6790698 1.0093023 1.0791176 1.2171717 1.5582822
-  #For time_window = "week", 1.227053 1.236967 1.288136 1.318182 1.349515: variance is lowest
+  #For time_window = "week", 0.9772727 1.0663507 1.1073446 1.1594203 1.3058252: variance is lowest
     
   
   image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\post_tara_feedback\\PF_DPV_", 
@@ -171,7 +171,7 @@ plot_pf_defects_x_y <- function(input_data, time_window = "year", n_cells_x = 15
 #This method is for digging deeper into the region that showed maximum number of defects in plot_pf_defects_x_y(). 
 #We do this for the one-year time-slice only as otherwise we have too few defects.
 #It points out a row of 6 cells for x in [9680, 10160] and y in [3680, 3760] where 264 (18.3% of 1440) defects occur.
-#More specifically, 53 defects (3.68% of all fatal PF defects) occurred for x in [9760, 9840] and y in [3680, 3760], i.e., 
+#More specifically, 53 defects (3.68% of 1440 fatal PF defects) occurred for x in [9760, 9840] and y in [3680, 3760], i.e., 
 #in an 80 x 80 region.
 plot_pf_defects_x_y_second_level <- function(input_data, 
                                              x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000, 
@@ -199,7 +199,13 @@ plot_pf_defects_x_y_second_level <- function(input_data,
      paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\post_tara_feedback\\pf_defects_2D_second_level_",
 	       n_cells_x, "x", n_cells_y, ".png", sep = "")
   png(image_file,  width = 600, height = 480, units = "px")
-  image2D(z = z, border = "black")
+  image2D(z = z, border = "black"
+          #,xaxs = "i", yaxs="i", 
+		  #,pty = "s"
+		  #,axes=F
+		  )
+  #axis(1,pos=1)
+  #axis(2,pos=1)
   dev.off()
   
   #Plot as a 2D contour:
@@ -222,8 +228,9 @@ plot_pf_defects_x_y_second_level <- function(input_data,
   cat(paste("Max: ", max(z), " defects (", round(100*max(z)/nrow(input_data), 2), 
             "% of the fatal PF defects in the high-defect region) occurred for x in [", x_min, ", ", x_max, "] and y in [", y_min, ", ", y_max, "]\n", sep = ""))
   
-  #z
-  input_data
+  
+  #input_data
+  z
 }
 
 #As yearly, monthly and weekly data all point to the same region as the highest-defect region, we are analyzing that 
@@ -411,6 +418,53 @@ get_zone_from_portion <- function(portion)
   zone <- substr(raw_zone, parenth_pos + 1, parenth_pos + 1)
 }
 
+#Are there coordinates which are appearing multiple times with the same defect? 
+analyze_coordinates_for_overlap <- function(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
+{
+  end_date <- max(input_data$manuf_date)
+  start_date <- as.character(as.Date(end_date) - 364)
+  input_data <- input_data %>% filter(manuf_date >= start_date)
+  
+  #Note: The left boundary is not part of the interval, the right boundary is.
+  input_data <- input_data %>% filter(X_COOR > x_min & X_COOR <= x_max & Y_COOR > y_min & Y_COOR <= y_max)
+  
+  by_coord <- input_data %>% select(X_COOR, Y_COOR, DEFECT_ID) %>% group_by(X_COOR, Y_COOR) %>% summarise(n_defects = length(DEFECT_ID))
+  by_coord <- by_coord %>% filter(n_defects > 1)
+  by_coord <- by_coord[with(by_coord, order(-n_defects)),]
+  
+  #9 defects at (x = 9840, y = 3675) only. The VEHICLE_ID and DEFECT_NUM values are all unique. The CREATION_TIME values range from 
+  #March to August. The portion values are all same (LH (A ZONE FR [SO])). The item values are all QTR PANEL.
+  #9 defects at (x = 10095, y = 3675) only. The VEHICLE_ID and DEFECT_NUM values are all unique. The CREATION_TIME values range from 
+  #Dec 2015 to August 2016. The portion values are all same (LH (A ZONE RR [SO])). The item values are all QTR PANEL.
+  defects_at_single_point <- input_data %>% filter(X_COOR == 10095 & Y_COOR == 3675)
+  print(length(unique(defects_at_single_point$VEHICLE_ID)))
+  print(length(unique(defects_at_single_point$DEFECT_NUM)))
+  by_coord
+}
+
+#Are there coordinates, in the high-defect region, in general, that belong to multiple portions?
+coordinates_in_overlaps <- function(fatal_defects, pf_defects, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
+{
+  coords_in_mult_portions <- fatal_defects %>% select(X_COOR, Y_COOR, PORTION) %>% group_by(X_COOR, Y_COOR) %>% summarise(n_portions = length(unique(PORTION)))
+  coords_in_mult_portions <- coords_in_mult_portions %>% filter(n_portions > 1)
+  coords_in_mult_portions <- coords_in_mult_portions[with(coords_in_mult_portions, order(-n_portions)),]
+  
+  end_date <- max(pf_defects$manuf_date)
+  start_date <- as.character(as.Date(end_date) - 364)
+  defects_in_hd_region <- pf_defects %>% filter(manuf_date >= start_date) %>% filter(X_COOR > x_min & X_COOR <= x_max & Y_COOR > y_min & Y_COOR <= y_max)
+  
+  #Are there defects in the high-defect region that could have been allocated to multiple portions? 218 such defects.
+  defects_in_hd_region <- defects_in_hd_region %>% inner_join(coords_in_mult_portions, by = c("X_COOR", "Y_COOR"))
+  print(defects_in_hd_region[1:10, c("X_COOR", "Y_COOR", "PORTION")]) #The PORTION comes from defects_in_hd_region, which means the reported portion
+  #value in the defect
+  
+  #One such defect is at x = 10005, y = 3315, portion reported was LH DOGLEG (A ZONE[SO]), but it could also have been LH (S ZONE FR [SO]).
+  print(fatal_defects %>% filter(X_COOR ==  10005 & Y_COOR == 3315) %>% select(PORTION))
+  #Another such defect is at x = 9675, y = 3345, portion reported was LH (S ZONE FR [SO]), but it could also have been LH DOGLEG (A ZONE[SO]).
+  print(fatal_defects %>% filter(X_COOR ==  9675 & Y_COOR == 3345) %>% select(PORTION))
+  defects_in_hd_region
+}
+
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_post_tara_feedback.R")
 #fatal_defects <- load_ics_fatal_defects_data() #52,519 rows. Date range is 2015-10-01 to 2016-11-23.
 #pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #45,577 rows
@@ -419,8 +473,10 @@ get_zone_from_portion <- function(portion)
 #input_data_by_manuf_date <- analyze_high_defect_region_by_time(pf_defects)
 #analyze_high_defect_region_by_shift(pf_defects)
 #pf_defects_by_manuf_date <- pf_dpv_for_fatal_defects(time_window = "week", pf_defects, arc_vehicle_info)
-#input_data <- plot_pf_defects_x_y_second_level(pf_defects, n_cells_x = 10, n_cells_y = 10)
+#plot_pf_defects_x_y_second_level(pf_defects, n_cells_x = 10, n_cells_y = 10)
 #by_item <- analyze_by_item(pf_defects, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
 #by_portion <- analyze_by_portion(pf_defects, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
-by_zone <- analyze_by_zone(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
+#by_zone <- analyze_by_zone(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
+by_coord <- analyze_coordinates_for_overlap(pf_defects)
+#defects_in_hd_region <- coordinates_in_overlaps(fatal_defects, pf_defects)
 
