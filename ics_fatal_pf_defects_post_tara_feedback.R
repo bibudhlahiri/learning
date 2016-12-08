@@ -168,6 +168,93 @@ plot_pf_defects_x_y <- function(input_data, time_window = "year", n_cells_x = 15
   z
 }
 
+#Check which pages have most defects. There are 3 values of PAGE only: 
+#096B EXTERIOR SURFACE (51.63%), 096B DOOR OPENINGS (34.77%), 096B FR RR SURFACE (13.59%).
+analyze_by_page <- function(input_data)
+{
+  end_date <- max(input_data$manuf_date)
+  start_date <- as.character(as.Date(end_date) - 364)
+  input_data <- input_data %>% filter(manuf_date >= start_date)
+  
+  by_page <- input_data %>% select(PAGE, DEFECT_ID) %>% group_by(PAGE) %>% summarise(n_defects = length(DEFECT_ID))
+  by_page <- by_page[with(by_page, order(-n_defects)),]
+  total_defects <- nrow(input_data)
+  by_page$percentage <- 100*by_page$n_defects/total_defects
+  by_page$PAGE <- factor(by_page$PAGE, 
+                              levels = by_page$PAGE,
+                              ordered = TRUE)
+  print(by_page)
+  
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\post_tara_feedback\\pf_fatal_defects_by_page.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(by_page, aes(x = factor(PAGE), y = n_defects)) + geom_bar(stat = "identity") + xlab("Page") + 
+       ylab("Number of fatal Paint Finish defects") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold')) + 
+         theme(axis.text.x = element_text(angle = 90))
+  print(p)
+  dev.off()
+  
+  by_page
+}
+
+#Takes a PAGE value as input and does the 2D heatmap for defects in that page only.
+#For PAGE = 096B EXTERIOR SURFACE, max: 1229 defects (5.52% of all fatal PF defects in the page) occurred for x in [9600, 10400] and y in [3200, 4000].
+#For PAGE = 096B DOOR OPENINGS, max: 835 defects (5.57% of all fatal PF defects in the page) occurred for x in [9600, 10400] and y in [2400, 3200]. 
+#The range of Y coordinates differ now: shifted by one cell down.
+#For PAGE = 096B FR RR SURFACE, max: 392 defects (6.69% of all fatal PF defects in the page) occurred for x in [6400, 7200] and y in [5600, 6400].
+#Both X and Y coordinates are very different now. 
+plot_pf_defects_x_y_specific_to_page <- function(input_data, time_window = "year", input_page = "096B EXTERIOR SURFACE", 
+                                                 n_cells_x = 15, n_cells_y = 15)
+{
+  library(plot3D)
+  end_date <- max(input_data$manuf_date)
+  if (time_window == "week")
+  {
+    start_date <- as.character(as.Date(end_date) - 6)
+  }
+  else if (time_window == "month")
+  {
+    start_date <- as.character(as.Date(end_date) - 29)
+  }
+  else #if (time_window == "year")
+  {
+    start_date <- as.character(as.Date(end_date) - 364)
+  }
+  input_data <- input_data %>% filter(manuf_date >= start_date)
+  input_data <- input_data %>% filter(PAGE == input_page)
+  
+  #cut divides the range of x into intervals and codes the values in x according to which interval they fall.
+  #Range is hard-coded to make sure all subsets of data have the same grid boundaries for a given grid size.
+  #Otherwise, it becomes data-dependent and the boundaries for different time-slices do not match exactly.
+  x_c <- cut(input_data$X_COOR, breaks = seq(0, 12000, length.out = n_cells_x + 1)) #The output of cut() is a factor
+  y_c <- cut(input_data$Y_COOR, breaks = seq(0, 12000, length.out = n_cells_y + 1))
+
+  #Calculate joint counts at cut levels:
+  z <- table(x_c, y_c) #The arguments to table can be factors
+
+  #Plot as a 2D heatmap:
+  image_file <- 
+     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICS\\post_tara_feedback\\",
+	       "\\pf_defects_2D_",
+	       time_window, "_", gsub(" ", "_", input_page), ".png", sep = "")
+  png(image_file,  width = 600, height = 480, units = "px")
+  image2D(z = z, border = "black")
+  dev.off()
+  
+  index_of_max <- as.numeric(which(z == max(z), arr.ind = TRUE))
+  x_boundaries_of_max <- rownames(z)[index_of_max[1]]
+  y_boundaries_of_max <- colnames(z)[index_of_max[2]]
+  x_min <- as.numeric(gsub("\\(", "", strsplit(x_boundaries_of_max, ",")[[1]][1]))
+  x_max <- as.numeric(gsub("\\]", "", strsplit(x_boundaries_of_max, ",")[[1]][2]))
+  y_min <- as.numeric(gsub("\\(", "", strsplit(y_boundaries_of_max, ",")[[1]][1]))
+  y_max <- as.numeric(gsub("\\]", "", strsplit(y_boundaries_of_max, ",")[[1]][2]))
+  cat(paste("For PAGE = ", input_page, ", max: ", max(z), " defects (", round(100*max(z)/nrow(input_data), 2), 
+            "% of all fatal PF defects in the page) occurred for x in [", x_min, ", ", x_max, "] and y in [", y_min, ", ", y_max, "]\n", sep = ""))
+  
+  z
+}
+
 #This method is for digging deeper into the region that showed maximum number of defects in plot_pf_defects_x_y(). 
 #We do this for the one-year time-slice only as otherwise we have too few defects.
 #It points out a row of 6 cells for x in [9680, 10160] and y in [3680, 3760] where 264 (18.3% of 1440) defects occur.
@@ -465,6 +552,8 @@ coordinates_in_overlaps <- function(fatal_defects, pf_defects, x_min = 9600, x_m
   defects_in_hd_region
 }
 
+
+
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_post_tara_feedback.R")
 #fatal_defects <- load_ics_fatal_defects_data() #52,519 rows. Date range is 2015-10-01 to 2016-11-23.
 #pf_defects <- load_ics_fatal_paint_finish_data(fatal_defects) #45,577 rows
@@ -477,6 +566,8 @@ coordinates_in_overlaps <- function(fatal_defects, pf_defects, x_min = 9600, x_m
 #by_item <- analyze_by_item(pf_defects, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
 #by_portion <- analyze_by_portion(pf_defects, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
 #by_zone <- analyze_by_zone(input_data, x_min = 9600, x_max = 10400, y_min = 3200, y_max = 4000)
-by_coord <- analyze_coordinates_for_overlap(pf_defects)
+#by_coord <- analyze_coordinates_for_overlap(pf_defects)
 #defects_in_hd_region <- coordinates_in_overlaps(fatal_defects, pf_defects)
-
+by_page <- analyze_by_page(pf_defects)
+#z <- plot_pf_defects_x_y_specific_to_page(pf_defects, time_window = "year", input_page = "096B FR RR SURFACE", 
+#                                                 n_cells_x = 15, n_cells_y = 15)
