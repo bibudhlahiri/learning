@@ -1,4 +1,5 @@
 library(rjson)
+library(stringdist)
 
 fill_grid_with_labels <- function(cnn_results, cutoff = 15, serial_no = 1)
 {
@@ -55,9 +56,47 @@ find_best_match <- function(cnn_results, i, j, cutoff = 15, serial_no = 1, cell_
   best_match
 }
 
+#Extracts all distinct horizontal n-grams from a matrix 
+extract_n_grams <- function(m_grid, n = 3)
+{
+  n_grams <- c()
+  n_rows <- nrow(m_grid)
+  n_columns <- ncol(m_grid)
+  for (i in 1:n_rows)
+  {
+    for (j in 1:(n_columns - n + 1))
+	{
+	  string <- paste(m_grid[i, j:(j+n-1)], collapse = "")
+	  if (!(string %in% n_grams))
+	  {
+	    n_grams <- c(n_grams, string)
+	  }
+	}
+  }
+  n_grams
+}
+
+remove_junk_chars <- function(m_grid)
+{
+  #Scan the n-grams (n = 3, 4 and 5) from rows. Have a dictionary. Do fuzzy lookup.
+  candidates <- c(extract_n_grams(m_grid, 3), extract_n_grams(m_grid, 4), extract_n_grams(m_grid, 5))
+  dictionary <- c("108", "NOTE", "1VN-998")
+  cand_dic <- expand.grid(candidate = candidates, dict_entry = dictionary)
+  #Note: string distance is case-sensitive, so converting to uppercase for now
+  cand_dic$candidate <- toupper(cand_dic$candidate)
+  cand_dic$distance <- apply(cand_dic, 1, function(row) stringdist(as.character(row["candidate"]), 
+                                                                   as.character(row["dict_entry"]), method = "dl"))
+  #What fraction of characters in the dictionary string match the candidate in the right order?
+  cand_dic$dict_entry_length <- apply(cand_dic, 1, function(row) nchar(as.character(row["dict_entry"])))
+  cand_dic$fuzzy_match_score <- cand_dic$distance/cand_dic$dict_entry_length
+  cand_dic <- cand_dic[with(cand_dic, order(fuzzy_match_score)),]
+}
+
 #source("C:\\Users\\blahiri\\Chevron\\compose_labels.r")
 cnn_results <- fromJSON(file = "C:\\Users\\blahiri\\Chevron\\vis\\data\\results.json")
 m_grid <- fill_grid_with_labels(cnn_results, cutoff = 15, serial_no = 1)
+cand_dic <- remove_junk_chars(m_grid)
+print(head(cand_dic, 20))
 
 
 
