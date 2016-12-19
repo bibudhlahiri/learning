@@ -6,9 +6,6 @@ fill_grid_with_labels <- function(tess_results, image_name)
 {
    #Get the subset for the given image only
    data_for_this_image <- subset(tess_results, (FileName == image_name))
-   cat(paste("Image file is ", image_name, "\n", sep = ""))
-   cat("The characters to be matched from are\n")
-   print(unique(data_for_this_image$CHARACTER_TEXT))
    
    cell_width <- 20
    cell_height <- 25
@@ -47,12 +44,9 @@ find_best_match <- function(data_for_this_image, i, j, cell_width = 20, cell_hei
 	{
 	  best_score <- score_for_box
 	  best_match <- data_for_this_image[k, "CHARACTER_TEXT"]
-	  #cat(paste("best_score = ", best_score, ", best_match = ", best_match, "\n", sep = ""))
 	  boundaries_for_best_match <- box_boundaries
 	}
   }
-  #cat("boundaries_for_best_match\n")
-  #print(round(boundaries_for_best_match))
   best_match
 }
 
@@ -96,8 +90,6 @@ display_output_of_tess <- function(tess_results, image_name)
    #Get the subset for the given image only
    data_for_this_image <- subset(tess_results, (FileName == image_name))
    cat(paste("Image file is ", image_name, "\n", sep = ""))
-   cat("The characters to be matched from are\n")
-   print(unique(data_for_this_image$CHARACTER_TEXT))
    n_matched_chars <- nrow(data_for_this_image)
    
    library(ggplot2)
@@ -130,31 +122,52 @@ display_all_outputs_of_tess <- function(tess_results)
   }
 }
 
+measure_recall_precision <- function(global_dictionary, tess_results, threshold = 0.35)
+{
+  image_names <- unique(tess_results$FileName)
+  n_images <- length(image_names)
+  sum_recall <- 0
+  sum_precision <- 0
+  for (i in 1:n_images)
+  {
+    cat(paste("\n\nImage = ", image_names[i], "\n", sep = ""))
+    m_grid <- fill_grid_with_labels(tess_results, image_name = image_names[i])
+	#Pass the global_dictionary to remove_junk_chars() because we want to see if 
+	#an image is falsely reporting strings not present in that image
+    cand_dic <- remove_junk_chars(m_grid, unlist(global_dictionary))
+	flagged <- subset(cand_dic, (fuzzy_match_score >= threshold))
+	reported_matches <- unique(flagged$dict_entry)
+	cat("The reported matches from the dictionary and their fuzzy matching scores are\n")
+	entries_scores <- aggregate(flagged$fuzzy_match_score, by = list(flagged$dict_entry), FUN = max)
+	colnames(entries_scores) <- c("dict_entry", "fuzzy_match_score")
+	entries_scores <- merge(entries_scores, flagged)
+	entries_scores <- entries_scores[with(entries_scores, order(-fuzzy_match_score)),]
+	print(entries_scores)
+	
+	recall <- length(intersect(global_dictionary[[i]], reported_matches))/length(global_dictionary[[i]])
+	sum_recall <- sum_recall + recall
+	precision <- length(intersect(global_dictionary[[i]], reported_matches))/length(reported_matches)
+	sum_precision <- sum_precision + precision
+    cat(paste("Recall = ", recall, ", precision = ", precision, "\n", sep = ""))
+  }
+  cat(paste("With threshold = ", threshold, ", avg recall = ", sum_recall/n_images, ", avg precision = ", sum_precision/n_images, "\n", sep = ""))
+}
+
 #source("C:\\Users\\blahiri\\Chevron\\compose_labels_from_tess_op.r")
 
 filename <- "C:\\Users\\blahiri\\Chevron\\data\\output_20161219.csv"
 tess_results <- read.csv(filename, header = F, stringsAsFactors = F)
 colnames(tess_results) <- c("FileName", "LHS_X", "LHS_Y", "RHS_X", "RHS_Y", "CHARACTER_TEXT")
 
-m_grid <- fill_grid_with_labels(tess_results, image_name = "145.jpg")
-#dictionary <- c("6-P-C5-7513", "(MINIMUM FLOW)")
-#dictionary <- c("IP-PCP-14", "PAHH 8425A1")
-#dictionary <- c("6VB-75G")
-#dictionary <- c("2-BD-C5-2587")
-#dictionary <- c("CONTRACTOR")
-#dictionary <- c("1-P-C2A-1838")
-#dictionary <- c("SP101")
-#dictionary <- c("6VB-75G")
-#dictionary <- c("FSV 8427A", "FO 8427", "6VC-460", "VN-998")
-dictionary <- c("PI 6305B", "PSLL 6305B")
-cand_dic <- remove_junk_chars(m_grid, dictionary)
-print(head(cand_dic, 20))
 #display_all_outputs_of_tess(tess_results)
 
-
-
-
-
+global_dictionary <- list(c("6-P-C5-7513", "(MINIMUM FLOW)"), c("IP-PCP-14", "PAHH 8425A1"), c("6VB-75G"), c("2-BD-C5-2587"),
+                          c("CONTRACTOR"), c("1-P-C2A-1838"), c("SP101"), c("6VB-75G"), c("FSV 8427A", "FO 8427", "6VC-460", "VN-998"), 
+						  c("PI 6305B", "PSLL 6305B"))
+measure_recall_precision(global_dictionary, tess_results, threshold = 0.4)
+#With threshold = 0.35, avg recall = 0.9, avg precision = 0.68
+#With threshold = 0.39, avg recall = 0.85, avg precision = 0.7
+#With threshold = 0.4, avg recall = 0.85, avg precision = 0.7
 
 
 
