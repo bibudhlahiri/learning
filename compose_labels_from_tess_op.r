@@ -47,12 +47,12 @@ find_best_match <- function(data_for_this_image, i, j, cell_width = 20, cell_hei
 	{
 	  best_score <- score_for_box
 	  best_match <- data_for_this_image[k, "CHARACTER_TEXT"]
-	  cat(paste("best_score = ", best_score, ", best_match = ", best_match, "\n", sep = ""))
+	  #cat(paste("best_score = ", best_score, ", best_match = ", best_match, "\n", sep = ""))
 	  boundaries_for_best_match <- box_boundaries
 	}
   }
-  cat("boundaries_for_best_match\n")
-  print(round(boundaries_for_best_match))
+  #cat("boundaries_for_best_match\n")
+  #print(round(boundaries_for_best_match))
   best_match
 }
 
@@ -91,13 +91,50 @@ remove_junk_chars <- function(m_grid, dictionary)
   cand_dic <- cand_dic[with(cand_dic, order(-fuzzy_match_score)),]
 }
 
+display_output_of_tess <- function(tess_results, image_name)
+{
+   #Get the subset for the given image only
+   data_for_this_image <- subset(tess_results, (FileName == image_name))
+   cat(paste("Image file is ", image_name, "\n", sep = ""))
+   cat("The characters to be matched from are\n")
+   print(unique(data_for_this_image$CHARACTER_TEXT))
+   n_matched_chars <- nrow(data_for_this_image)
+   
+   library(ggplot2)
+   df <- data.frame()
+   image_file <- paste("C:\\Users\\blahiri\\Chevron\\vis\\from_jay\\op_of_bb_tess\\20161219\\", 
+                       substr(image_name, 1, nchar(image_name) - 4), ".png", sep = "")
+   png(image_file)
+   p <- ggplot(df) + geom_point() + xlim(0, 400) + ylim(0, 275) + scale_y_reverse()
+   
+   for (i in 1:n_matched_chars)
+   {
+     p <- p + annotate("rect", xmin = data_for_this_image[i, "LHS_X"], xmax = data_for_this_image[i, "RHS_X"],
+                          ymin = data_for_this_image[i, "LHS_Y"], ymax = data_for_this_image[i, "RHS_Y"], alpha = .2)
+	 p <- p + annotate("text", x = (data_for_this_image[i, "LHS_X"] + data_for_this_image[i, "RHS_X"])/2, 
+	                           y = (data_for_this_image[i, "LHS_Y"] + data_for_this_image[i, "RHS_Y"])/2, 
+							   label = data_for_this_image[i, "CHARACTER_TEXT"])
+   }
+   print(p)
+   aux <- dev.off()
+}
+
+display_all_outputs_of_tess <- function(tess_results)
+{
+  image_names <- unique(tess_results$FileName)
+  print(image_names)
+  n_images <- length(image_names)
+  for (i in 1:n_images)
+  {
+    display_output_of_tess(tess_results, image_name = image_names[i])
+  }
+}
+
 #source("C:\\Users\\blahiri\\Chevron\\compose_labels_from_tess_op.r")
 
-filename <- "C:\\Users\\blahiri\\Chevron\\data\\output.csv"
+filename <- "C:\\Users\\blahiri\\Chevron\\data\\output_20161219.csv"
 tess_results <- read.csv(filename, header = F, stringsAsFactors = F)
 colnames(tess_results) <- c("FileName", "LHS_X", "LHS_Y", "RHS_X", "RHS_Y", "CHARACTER_TEXT")
-image_names <- unique(tess_results$FileName)
-print(image_names)
 
 m_grid <- fill_grid_with_labels(tess_results, image_name = "145.jpg")
 #dictionary <- c("6-P-C5-7513", "(MINIMUM FLOW)")
@@ -105,12 +142,17 @@ m_grid <- fill_grid_with_labels(tess_results, image_name = "145.jpg")
 #dictionary <- c("6VB-75G")
 #dictionary <- c("2-BD-C5-2587")
 #dictionary <- c("CONTRACTOR")
+#dictionary <- c("1-P-C2A-1838")
 #dictionary <- c("SP101")
 #dictionary <- c("6VB-75G")
 #dictionary <- c("FSV 8427A", "FO 8427", "6VC-460", "VN-998")
 dictionary <- c("PI 6305B", "PSLL 6305B")
 cand_dic <- remove_junk_chars(m_grid, dictionary)
 print(head(cand_dic, 20))
+#display_all_outputs_of_tess(tess_results)
+
+
+
 
 
 
