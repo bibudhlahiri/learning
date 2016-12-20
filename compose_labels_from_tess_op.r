@@ -92,6 +92,7 @@ extract_n_grams_vertically <- function(m_grid, n = 3)
 
 remove_junk_chars <- function(m_grid, dictionary, flipped)
 {
+  dictionary <- unique(dictionary) #Remove duplicates from dictionary as same symbol may be present in multiple sliding windows
   #Scan the n-grams (n = 3, 4 and 5) from rows/columns, depending on flipped. Have a dictionary. Do fuzzy lookup.
   if (!flipped)
   {
@@ -173,13 +174,13 @@ measure_recall_precision <- function(global_dictionary, tess_results, threshold 
     m_grid_horizontal <- fill_grid_with_labels(tess_results, image_name = image_names[i], FALSE)
 	#Pass the global_dictionary to remove_junk_chars() because we want to see if 
 	#an image is falsely reporting strings not present in that image
-    cand_dic_horizontal <- remove_junk_chars(m_grid_horizontal, unlist(global_dictionary), FALSE)
+    cand_dic_horizontal <- remove_junk_chars(m_grid_horizontal, unlist(global_dictionary, use.names = FALSE), FALSE)
 	
 	#Extract the vertical strings next
 	m_grid_vertical <- fill_grid_with_labels(tess_results, image_name = image_names[i], TRUE)
 	#Pass the global_dictionary to remove_junk_chars() because we want to see if 
 	#an image is falsely reporting strings not present in that image
-    cand_dic_vertical <- remove_junk_chars(m_grid_vertical, unlist(global_dictionary), TRUE)
+    cand_dic_vertical <- remove_junk_chars(m_grid_vertical, unlist(global_dictionary, use.names = FALSE), TRUE)
 	
 	cand_dic <- rbind(cand_dic_horizontal, cand_dic_vertical)
 	
@@ -200,9 +201,9 @@ measure_recall_precision <- function(global_dictionary, tess_results, threshold 
 	  entries_scores <- entries_scores[with(entries_scores, order(-fuzzy_match_score)),]
 	  print(entries_scores)
 	
-	  recall <- length(intersect(global_dictionary[[i]], reported_matches))/length(global_dictionary[[i]])
+	  recall <- length(intersect(global_dictionary[[image_names[i]]], reported_matches))/length(global_dictionary[[image_names[i]]])
 	  sum_recall <- sum_recall + recall
-	  precision <- length(intersect(global_dictionary[[i]], reported_matches))/length(reported_matches)
+	  precision <- length(intersect(global_dictionary[[image_names[i]]], reported_matches))/length(reported_matches)
 	  sum_precision <- sum_precision + precision
 	}
     cat(paste("Recall = ", recall, ", precision = ", precision, "\n", sep = ""))
@@ -217,36 +218,37 @@ tess_results <- read.csv(filename, header = F, stringsAsFactors = F)
 colnames(tess_results) <- c("FileName", "LHS_X", "LHS_Y", "RHS_X", "RHS_Y", "CHARACTER_TEXT", "FLIPPED")
 
 #display_all_outputs_of_tess(tess_results)
-#Make sure the order of individual vectors in the global_dictionary is same as
-#the order of files when you get the image names in measure_recall_precision() by doing
-#image_names <- unique(tess_results$FileName)
-global_dictionary <- list(c("6-P-C5-7513", "(MINIMUM FLOW)", "842"),  #35.jpg
-                          c("IP-PCP-14", "PAHH 8425A1"), #37.jpg
-						  c("6VB-75G", "C5-1826"), #86.jpg 
-						  c("2-BD-C5-2587"), #92.jpg
-                          c("CONTRACTOR"), #93.jpg
-						  c("1-P-C2A-1838", "A2A"), #99.jpg 
-						  c("SP101"), #112.jpg
-						  c("XA8427A1", "PALL8427A", "IP-PCP-14", "C5-1827"), #116.jpg
-						  c("6VB-75G"), #126.jpg
-						  c("FSV 8427A", "FO 8427", "6VC-460", "1VN-998", "VB-75M"), #127.jpg
-						  c("FV8427", "4FO", "6-P-C5-1813"), #128.jpg
-						  c("P-C5-1827"), #129.jpg
-						  c("PI 6305B", "PSLL 6305B"), #145.jpg
-						  c("1-FL-C2A-2874", "1VN-998", "1VB-71", "C2A", "HPV"), #310.jpg
-						  c("2-DW-A1-1360", "HS8425", "XL8425"), #312.jpg
-						  c("1VN-998", "FSV8426", "FIT8426", "VC-460"), #810.jpg
-						  c("10VB-75GCSO", "1VN-998S", "C2A", "HPV"), #910.jpg
-						  c("1FL-C2A-2876", "1VB-71", "C2A", "VENDOR") #1010.jpg
+#Creating this as a named list so that lookup can be performed by name,
+#and not by index. That way, the order of filenames in output.csv 
+#does not matter.
+global_dictionary <- list("35.jpg" = c("6-P-C5-7513", "(MINIMUM FLOW)", "842"),
+                          "37.jpg" = c("IP-PCP-14", "PAHH 8425A1"), 
+						  "86.jpg" = c("6VB-75G", "C5-1826"), 
+						  "92.jpg" = c("2-BD-C5-2587"),
+                          "93.jpg" = c("CONTRACTOR"), 
+						  "99.jpg" = c("1-P-C2A-1838", "A2A"),  
+						  "112.jpg" = c("SP101"), 
+						  "116.jpg" = c("XA8427A1", "PALL8427A", "IP-PCP-14", "C5-1827"), 
+						  "126.jpg" = c("6VB-75G"), 
+						  "127.jpg" = c("FSV 8427A", "FO 8427", "6VC-460", "1VN-998", "VB-75M"), 
+						  "128.jpg" = c("FV8427", "4FO", "6-P-C5-1813"), 
+						  "129.jpg" = c("P-C5-1827"), 
+						  "145.jpg" = c("PI 6305B", "PSLL 6305B"), 
+						  "310.jpg" = c("1-FL-C2A-2874", "1VN-998", "1VB-71", "C2A", "HPV"), 
+						  "312.jpg" = c("2-DW-A1-1360", "HS8425", "XL8425"), 
+						  "810.jpg" = c("1VN-998", "FSV8426", "FIT8426", "VC-460"), 
+						  "910.jpg" = c("10VB-75GCSO", "1VN-998S", "C2A", "HPV"), 
+						  "1010.jpg" = c("1FL-C2A-2876", "1VB-71", "C2A", "VENDOR") 
 						  )
-measure_recall_precision(global_dictionary, tess_results, threshold = 0.45)
+measure_recall_precision(global_dictionary, tess_results, threshold = 0.5)
 #Before implementing flipped characters, 
 #With threshold = 0.35, avg recall = 0.9, avg precision = 0.68
 #With threshold = 0.39, avg recall = 0.85, avg precision = 0.7
 #With threshold = 0.4, avg recall = 0.85, avg precision = 0.7
 
 #After implementing flipped characters, 
-#With threshold = 0.4, avg recall = 0.723148148148148, avg precision = 0.273615835870738
+#With threshold = 0.4, avg recall = 0.9083, avg precision = 0.373
+#With threshold = 0.5, avg recall = 0.621296296296296, avg precision = 0.37781774325892
 
 
 
