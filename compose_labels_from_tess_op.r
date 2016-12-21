@@ -1,25 +1,44 @@
 library(rjson)
 library(stringdist)
 
+curr_row <<- 1
+scores_for_grid_cells <<- data.frame(matrix(ncol = 5, nrow = 1)) #Just junk initialization of global variable 
+
 #The matched characters are given. 
 fill_grid_with_labels <- function(tess_results, image_name, flipped)
 {
    #Get the subset for the given image only
-   data_for_this_image <- subset(tess_results, (FileName == image_name))
-   
+   data_for_this_image <- subset(tess_results, ((FileName == image_name) & (FLIPPED == as.numeric(flipped))))
+   #Fill up the grid only if there are horizontal or vertical characters to be placed
+   if (nrow(data_for_this_image) == 0)
+   {
+     return(NA)
+   }
+   #Assigning an ID to each character so that if same character occur multiple times in 
+   #the same image, the occurrences can be distinguished.
+   data_for_this_image$char_id <- 1:nrow(data_for_this_image)
    cell_width <- ifelse(!flipped, 20, 25)
    cell_height <- ifelse(!flipped, 25, 20)
    n_columns <- 400/cell_width
    n_rows <- round(275/cell_height)
    m_grid <- matrix(nrow = n_rows, ncol = n_columns)
+   #scores_for_grid_cells is being created to improve precision, and will be used later
+   scores_for_grid_cells <<- data.frame(matrix(ncol = 5, nrow = n_rows*n_columns)) 
+   colnames(scores_for_grid_cells) <<- c("row_number", "col_number", "char_placed", "id_of_char_placed", "score")
+   curr_row <<- 1
    for (i in 1:n_rows) 
    {
      for (j in 1:n_columns)
 	 {
 	   m_grid[i, j] <- find_best_match(data_for_this_image, i, j, cell_width, cell_height)
 	 }
-   }  
-   m_grid   
+   } 
+   print(m_grid)
+   #cat("scores_for_grid_cells\n")
+   #print(scores_for_grid_cells)
+   m_grid <- remove_junk_chars(m_grid, data_for_this_image, scores_for_grid_cells, n_rows, n_columns, image_name)   
+   print(m_grid)
+   return(m_grid)
 }
 
 find_best_match <- function(data_for_this_image, i, j, cell_width, cell_height)
@@ -31,6 +50,7 @@ find_best_match <- function(data_for_this_image, i, j, cell_width, cell_height)
   best_score <- Inf
   best_match <- "*" 
   n_matched_chars <- nrow(data_for_this_image)
+  id_of_best_match <- 0
   for (k in 1:n_matched_chars)
   {
     #Get x_tl, y_tl, x_tr, y_tr, x_bl, y_bl, x_br, y_br for the k-th matched character
@@ -45,10 +65,58 @@ find_best_match <- function(data_for_this_image, i, j, cell_width, cell_height)
 	  best_score <- score_for_box
 	  best_match <- data_for_this_image[k, "CHARACTER_TEXT"]
 	  boundaries_for_best_match <- box_boundaries
+	  id_of_best_match <- data_for_this_image[k, "char_id"]
 	}
   }
+  scores_for_grid_cells[curr_row, "row_number"] <<- i
+  scores_for_grid_cells[curr_row, "col_number"] <<- j
+  scores_for_grid_cells[curr_row, "char_placed"] <<- best_match
+  scores_for_grid_cells[curr_row, "id_of_char_placed"] <<- id_of_best_match
+  scores_for_grid_cells[curr_row, "score"] <<- best_score
+  curr_row <<- curr_row + 1
   best_match
 }
+
+#We assigned one character to each cell of the grid originally. That
+#is creating lots of false positives, especially with the shorter tokens.
+#We will remove the unnecessary characters with the following logic: for each
+#matched character, if it has been allocated to multiple cells, we will keep
+#it only in that cell where its score (based on differences of coordinates) is highest, 
+#and remove it from everywhere else.
+remove_junk_chars <- function(m_grid, data_for_this_image, scores_for_grid_cells, n_rows, n_columns, image_name)   
+{
+  #Find the lowest (best) score for each char_id
+  best_scores_for_chars <- aggregate(scores_for_grid_cells$score, by = list(scores_for_grid_cells$id_of_char_placed), FUN = min)
+  colnames(best_scores_for_chars) <- c("id_of_char_placed", "score")
+  best_scores_for_chars <- merge(best_scores_for_chars, scores_for_grid_cells)
+  #cat("best_scores_for_chars\n")
+  #print(best_scores_for_chars)
+  cat(paste("n_rows = ", n_rows, ", n_columns = ", n_columns, "\n", sep = ""))
+  for (i in 1:(n_rows*n_columns))
+  {
+        #Go through each cell of m_grid (using scores_for_grid_cells), and find out the best position for the char placed in the cell 
+        #from best_scores_for_chars. If the position of the current cell does not match the best position for the placed character,
+        #fill the cell with a special character like "@".
+        record_for_best_position <- subset(best_scores_for_chars, (best_scores_for_chars$id_of_char_placed == scores_for_grid_cells[i, "id_of_char_placed"]))
+        if (image_name == "1010.jpg")
+        {
+          cat(paste("i = ", i, ", scores_for_grid_cells[i, id_of_char_placed] = ", scores_for_grid_cells[i, "id_of_char_placed"], "\n", sep = ""))
+          if (scores_for_grid_cells[i, "id_of_char_placed"] == 12)
+          {
+            cat("record_for_best_position\n")
+            print(record_for_best_position)
+          }
+        }
+        if (!((record_for_best_position[1, "row_number"] == scores_for_grid_cells[i, "row_number"])
+             && (record_for_best_position[1, "col_number"] == scores_for_grid_cells[i, "col_number"])))
+        {
+          #cat("Putting @\n")
+          m_grid[scores_for_grid_cells[i, "row_number"], scores_for_grid_cells[i, "col_number"]] <- "@"
+        }
+  }
+  m_grid
+}
+
 
 #Extracts all distinct horizontal n-grams from a matrix 
 extract_n_grams_horizontally <- function(m_grid, n = 3)
@@ -90,7 +158,9 @@ extract_n_grams_vertically <- function(m_grid, n = 3)
   n_grams
 }
 
-remove_junk_chars <- function(m_grid, dictionary, flipped)
+
+
+calc_fuzzy_score <- function(m_grid, dictionary, flipped)
 {
   dictionary <- unique(dictionary) #Remove duplicates from dictionary as same symbol may be present in multiple sliding windows
   #Scan the n-grams (n = 3, 4 and 5) from rows/columns, depending on flipped. Have a dictionary. Do fuzzy lookup.
@@ -172,17 +242,41 @@ measure_recall_precision <- function(global_dictionary, tess_results, threshold 
 	
 	#Extract the horizontal strings first
     m_grid_horizontal <- fill_grid_with_labels(tess_results, image_name = image_names[i], FALSE)
-	#Pass the global_dictionary to remove_junk_chars() because we want to see if 
+	#Pass the global_dictionary to calc_fuzzy_score() because we want to see if 
 	#an image is falsely reporting strings not present in that image
-    cand_dic_horizontal <- remove_junk_chars(m_grid_horizontal, unlist(global_dictionary, use.names = FALSE), FALSE)
+	if (!is.na(m_grid_horizontal))
+	{
+      cand_dic_horizontal <- calc_fuzzy_score(m_grid_horizontal, unlist(global_dictionary, use.names = FALSE), FALSE)
+	}
+	else
+	{
+	  cand_dic_horizontal <- NA
+	}
 	
 	#Extract the vertical strings next
 	m_grid_vertical <- fill_grid_with_labels(tess_results, image_name = image_names[i], TRUE)
-	#Pass the global_dictionary to remove_junk_chars() because we want to see if 
+	#Pass the global_dictionary to calc_fuzzy_score() because we want to see if 
 	#an image is falsely reporting strings not present in that image
-    cand_dic_vertical <- remove_junk_chars(m_grid_vertical, unlist(global_dictionary, use.names = FALSE), TRUE)
-	
-	cand_dic <- rbind(cand_dic_horizontal, cand_dic_vertical)
+	if (!is.na(m_grid_vertical))
+	{
+      cand_dic_vertical <- calc_fuzzy_score(m_grid_vertical, unlist(global_dictionary, use.names = FALSE), TRUE)
+	}
+	else
+	{
+	  cand_dic_vertical <- NA
+	}
+	if ((!is.na(cand_dic_horizontal)) && (!is.na(cand_dic_vertical)))
+	{
+	  cand_dic <- rbind(cand_dic_horizontal, cand_dic_vertical)
+	}
+	else if (!is.na(cand_dic_horizontal))
+	{
+	  cand_dic <- cand_dic_horizontal
+	}
+	else
+	{
+	  cand_dic <- cand_dic_vertical
+	}
 	
 	flagged <- subset(cand_dic, (fuzzy_match_score >= threshold))
 	reported_matches <- unique(flagged$dict_entry)
@@ -240,7 +334,7 @@ global_dictionary <- list("35.jpg" = c("6-P-C5-7513", "(MINIMUM FLOW)", "842"),
 						  "910.jpg" = c("10VB-75GCSO", "1VN-998S", "C2A", "HPV"), 
 						  "1010.jpg" = c("1FL-C2A-2876", "1VB-71", "C2A", "VENDOR") 
 						  )
-measure_recall_precision(global_dictionary, tess_results, threshold = 0.5)
+measure_recall_precision(global_dictionary, tess_results, threshold = 0.4)
 #Before implementing flipped characters, 
 #With threshold = 0.35, avg recall = 0.9, avg precision = 0.68
 #With threshold = 0.39, avg recall = 0.85, avg precision = 0.7
