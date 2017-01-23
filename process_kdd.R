@@ -21,6 +21,8 @@ load_kdd_data <- function()
   column_names <- c(column_names, "connection_label")
   setnames(data_corr, names(data_corr), column_names)
   
+  data_corr[ , num_outbound_cmds := NULL] #All values are 0
+  
   
   #List the columns whose type should be "factor", i.e., the categorical variables. 
   cols <- c("protocol_type", "service", "flag")
@@ -51,12 +53,17 @@ load_kdd_data <- function()
   #Making these numeric make sense from the semantic point of view.
   sc <- c("duration", "src_bytes", "dst_bytes", "wrong_fragment", "urgent", "hot", "num_failed_logins", 
           "num_compromised", "num_root", "num_file_creations", "num_shells", "num_access_files",
-		  "num_outbound_cmds", "count", "serror_rate", "rerror_rate", "same_srv_rate", "diff_srv_rate", 
+		  "count", "serror_rate", "rerror_rate", "same_srv_rate", "diff_srv_rate", 
 		  "srv_count", "srv_serror_rate", "srv_rerror_rate", "srv_diff_host_rate", 
 		  "dst_host_count", "dst_host_srv_count") 
   data_corr <- copy(data_corr)[ , (sc) := lapply(.SD, scale), .SDcols = sc]
   #standardized_filename <- "C:\\Users\\blahiri\\kdd_cup_for_SAx\\kddcup.data.standardized"
   #write.table(data_corr, standardized_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
+  
+  #Round off numeric columns to reduce filesize
+  cols_to_round <- names(data_corr)
+  cols_to_round <- cols_to_round[(cols_to_round != "connection_label")]
+  for (j in cols_to_round) set(data_corr, j = j, value = round(data_corr[[j]], 4))
   
   standardized_sample_filename <- "C:\\Users\\blahiri\\kdd_cup_for_SAx\\kddcup.data.standardized.sampled"
   sample_size <- 25000 #Makes it a ~5 MB file
@@ -124,41 +131,54 @@ cluster_kdd <- function()
 {
   filename <- "C:\\Users\\blahiri\\kdd_cup_for_SAx\\kddcup.data.standardized.sampled"
   kdd_sample <- fread(filename, header = TRUE, sep = ",", stringsAsFactors = FALSE, showProgress = TRUE, 
-                                colClasses = c("numeric", "character", "character", "character", "numeric", 
-					                           "numeric", "character", "numeric", "numeric", "numeric",
-											   "numeric", "character", "numeric", "numeric", "numeric",
-											   "numeric", "numeric", "numeric", "numeric", "numeric",
-											   "character", "character", "numeric", "numeric", "numeric",
+                                colClasses = c("numeric", "numeric", "numeric", "numeric",  #Taking 1 off for num_outbound_cmds
+					                           "numeric", "numeric", "numeric", "numeric", "numeric",
 											   "numeric", "numeric", "numeric", "numeric", "numeric",
 											   "numeric", "numeric", "numeric", "numeric", "numeric",
 											   "numeric", "numeric", "numeric", "numeric", "numeric",
-											   "numeric", "character"), 
+											   "numeric", "numeric", "numeric", "numeric", "numeric",
+											   "numeric", "numeric", "numeric", "numeric", "numeric",
+											   "numeric", "numeric", "numeric", "numeric", "character",
+											   "numeric", "numeric", "numeric", "numeric", "numeric"), 
                                 data.table = TRUE)
   kdd_sample <- map_to_five_classes(kdd_sample)
   kdd_sample[, final_label := ifelse((kdd_sample$parent_label == "normal"), "normal", "attack")]
-  clusters <- kmeans(kdd_sample[, .SD, .SDcols = sapply(kdd_sample, is.numeric)],  #cluster with the numeric columns only
-                     centers = 2)
+  to_cluster <- kdd_sample[, .SD, .SDcols = sapply(kdd_sample, is.numeric)] #cluster with the numeric columns only
+  clusters <- kmeans(to_cluster, centers = 2)
   #Check fraction of normal and attack packets in two clusters.
-  kdd_sample[, assigned_cluster := clusters$cluster]
-  cont_tab <- table(kdd_sample$final_label, kdd_sample$assigned_cluster) #Average purity of clusters is 0.8364662
-  #We took the definition of average purity from here: http://www.siam.org/meetings/sdm06/proceedings/030caof.pdf
-  #62 points in cluster 1, 24738 in cluster 2. But interestingly, 54 (87%) of points in cluster 1 are normal, whereas
-  #19839 (80%) of points in cluster 2 are attack traffic.
-  kdd_sample
-}
-
-test_normalization <- function()
-{
-  scaled_x <- as.numeric(scale(rnorm(100, mean = 10, sd = 1)))
-  scaled_y <- as.numeric(scale(rnorm(100, mean = 50, sd = 2)))
-  sqrt(sum((scaled_x - scaled_y)^2))
+  to_cluster[, assigned_cluster := clusters$cluster]
+  
+  #Get an idea of the distance of points from their nearest cluster centers. This will help set the threshold in SAx.
+  #to_cluster
+  to_cluster[, distance_to_centroid := apply(to_cluster, 1, function(row) find_distance_to_centroid( 
+  c(row["duration"], row["src_bytes"], row["dst_bytes"], row["land"], row["wrong_fragment"],
+    row["urgent"], row["hot"], row["num_failed_logins"], row["logged_in"], row["num_compromised"],
+	row["root_shell"], row["su_attempted"], row["num_root"], row["num_file_creations"], row["num_shells"],
+	row["num_access_files"], row["is_host_login"], row["is_guest_login"], row["count"], row["srv_count"],
+	row["serror_rate"], row["srv_serror_rate"], row["rerror_rate"], row["srv_rerror_rate"], row["same_srv_rate"],
+	row["diff_srv_rate"], row["srv_diff_host_rate"], row["dst_host_count"], row["dst_host_srv_count"], row["dst_host_same_srv_rate"],
+	row["dst_host_diff_srv_rate"], row["dst_host_same_src_port_rate"], row["dst_host_srv_diff_host_rate"], row["dst_host_serror_rate"], row["dst_host_srv_serror_rate"],
+    row["dst_host_rerror_rate"], row["dst_host_srv_rerror_rate"], row["protocol_type_tcp"], row["service_ecr_i"], row["service_private"],
+	row["flag_S0"], row["flag_SF"]),
+  row["assigned_cluster"], clusters$centers))]
+  
+  print(fivenum(to_cluster$distance_to_centroid)) #0.00621319   0.03545544   0.03545762   3.23626149 114.51476117
+  percentile <- ecdf(to_cluster$distance_to_centroid)
+  percentile(10) #0.99076
+  
+  to_cluster
 }
   
+find_distance_to_centroid <- function(current_vec, assigned_cluster, centers)
+{
+  #print(current_vec)
+  sqrt(sum((as.numeric(current_vec) - as.numeric(centers[assigned_cluster, ]))^2))
+}
 #source("C:\\Users\\blahiri\\kdd_cup_for_SAx\\process_kdd.R")
-data_corr <- load_kdd_data() #4,898,431 rows; 972781 (19.85%) normal
+#data_corr <- load_kdd_data() #4,898,431 rows; 972781 (19.85%) normal
 #data_corr <- map_to_five_classes(data_corr)
 #print(table(data_corr$parent_label)) #dos 3883370 (79%), probe 41102 (0.8%), r2l 1126 (0.02%), u2r 52
-#kdd_sample <- cluster_kdd()
+to_cluster <- cluster_kdd()
 
 #euclidean_dist <- test_normalization()
 
