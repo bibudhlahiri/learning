@@ -70,7 +70,13 @@ load_kdd_data <- function()
   sampled_kdd_data <- data_corr[sample(nrow(data_corr), sample_size), ]
   write.table(sampled_kdd_data, standardized_sample_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
   
-  data_corr
+  train_index <- sample(25000, 20000)
+  kdd_training_sample <- sampled_kdd_data[train_index, ]
+  training_sample_filename <- "C:\\Users\\blahiri\\kdd_cup_for_SAx\\kdd_training_sample"
+  write.table(kdd_training_sample, training_sample_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
+  kdd_test_sample <- sampled_kdd_data[-train_index, ]  
+  test_sample_filename <- "C:\\Users\\blahiri\\kdd_cup_for_SAx\\kdd_test_sample"
+  write.table(kdd_test_sample, test_sample_filename, sep = ",", row.names = FALSE, col.names = TRUE, quote = FALSE)
 }
 
 
@@ -181,11 +187,12 @@ find_distance_to_centroid <- function(current_vec, assigned_cluster, centers)
   #print(current_vec)
   sqrt(sum((as.numeric(current_vec) - as.numeric(centers[assigned_cluster, ]))^2))
 }
+
 #source("C:\\Users\\blahiri\\kdd_cup_for_SAx\\process_kdd.R")
-#data_corr <- load_kdd_data() #4,898,431 rows; 972781 (19.85%) normal
+load_kdd_data() #4,898,431 rows; 972781 (19.85%) normal
 #data_corr <- map_to_five_classes(data_corr)
 #print(table(data_corr$parent_label)) #dos 3883370 (79%), probe 41102 (0.8%), r2l 1126 (0.02%), u2r 52
-to_cluster <- cluster_kdd()
+#to_cluster <- cluster_kdd()
 
 #euclidean_dist <- test_normalization()
 
