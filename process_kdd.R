@@ -144,7 +144,7 @@ cluster_kdd <- function()
   kdd_sample <- map_to_five_classes(kdd_sample)
   kdd_sample[, final_label := ifelse((kdd_sample$parent_label == "normal"), "normal", "attack")]
   to_cluster <- kdd_sample[, .SD, .SDcols = sapply(kdd_sample, is.numeric)] #cluster with the numeric columns only
-  clusters <- kmeans(to_cluster, centers = 2)
+  clusters <- kmeans(to_cluster, centers = 200)
   #Check fraction of normal and attack packets in two clusters.
   to_cluster[, assigned_cluster := clusters$cluster]
   
@@ -162,9 +162,16 @@ cluster_kdd <- function()
 	row["flag_S0"], row["flag_SF"]),
   row["assigned_cluster"], clusters$centers))]
   
-  print(fivenum(to_cluster$distance_to_centroid)) #0.00621319   0.03545544   0.03545762   3.23626149 114.51476117
+  print(fivenum(to_cluster$distance_to_centroid)) 
+  #With k = 2, 0.00621319   0.03545544   0.03545762   3.23626149  114.51476117
+  #With k = 3, 0.00207569   0.02620893   0.02621193   1.92907525  114.46398929
+  #With k = 4, 1.726433e-03 0.0256287    0.02563178   1.593763    114.2546
+  #With k =30, 0.002375915  0.022761839  0.022765315  0.274212546 19.959214687
+  #With k =100,0.002936039  0.021564915  0.021568586  0.105381863 13.784577548
+  #With k =150,0.00000000   0.02116488   0.02116862   0.08667574  13.78457755
+  #With k =200,0.000000000  0.001751310  0.004750433  0.069927011 13.784577548
   percentile <- ecdf(to_cluster$distance_to_centroid)
-  percentile(10) #0.99076
+  print(percentile(10)) #0.99076
   
   to_cluster
 }
