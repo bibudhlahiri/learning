@@ -3,6 +3,9 @@ library(plyr)
 library(dplyr)
 library(ggplot2)
 library(rpart)
+library(party)
+
+dtree <- NA
 
 load_ics_activeplant_data <- function()
 {
@@ -34,12 +37,47 @@ build_dtree <- function(dpv_by_hour)
   features <- colnames(dpv_by_hour)
   features <- features[!(features %in% c("record_hour", "dpv"))]
   formula_str <- paste("dpv ~ ", paste(features, collapse = " + "), sep = "")
-  dtree <- rpart(as.formula(formula_str), data = dpv_by_hour)
+  #rpart(as.formula(formula_str), data = dpv_by_hour)
+  ctree(as.formula(formula_str), data = dpv_by_hour)
+}
+
+custom_fitness <- function(x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11)
+{
+  newdata <- data.frame(mean_BP1_1_Robot_Air_Motor = x1, mean_BP2_1_Robot_Air_Motor = x2,
+                        mean_CP1_1_Robot_Air_Motor = x3, mean_CP1_3_Robot_HV = x4,
+						mean_CP2_1_Robot_Air_Motor = x5, mean_CBTH_Air_House_1_Humidity = x6,
+						mean_CBTH_Air_House_2_Humidity = x7, mean_CBTH_Air_House_3_Humidity = x8,
+						mean_CBTH_Air_House_5_Humidity = x9, mean_CBTH_Air_House_2_Temp = x10, mean_CBTH_Air_House_5_Temp = x11)
+  #Note: ga() maximizes the fitness function but we want to minimize DPV, hence return negative
+  #raw_prediction <- predict(dtree, newdata)
+  raw_prediction <- predict(dtree, newdata, type = "response")
+  #cat(paste("x1 = ", x1, ", x2 = ", x2, ", raw_prediction = ", raw_prediction, "\n", sep = ""))
+  -raw_prediction
+}
+
+optimize_ap_params <- function(dpv_by_hour)
+{
+  library(GA)
+  features <- colnames(dpv_by_hour)
+  features <- features[!(features %in% c("record_hour", "dpv"))]
+  min_values <- as.numeric(sapply(features, function(feature) min(dpv_by_hour[, feature])))
+  max_values <- as.numeric(sapply(features, function(feature) max(dpv_by_hour[, feature])))
+  
+  
+  GA <- ga(type = "real-valued", 
+           fitness = function(x) custom_fitness(x[1], x[2], x[3], x[4], 
+		                                        x[5], x[6], x[7], x[8], 
+												x[9], x[10], x[11]), 
+           min = min_values, max = max_values,
+           optim = TRUE)
+  print(summary(GA))
+  GA
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_vs_activeplant.R")
 ics_activeplant <- load_ics_activeplant_data()
 dpv_by_hour <- compute_dpvs(ics_activeplant)
-dtree <- build_dtree(dpv_by_hour)
+dtree <<- build_dtree(dpv_by_hour)
+GA <- optimize_ap_params(dpv_by_hour)
 
 
