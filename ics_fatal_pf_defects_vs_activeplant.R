@@ -62,8 +62,7 @@ optimize_ap_params <- function(dpv_by_hour)
   features <- features[!(features %in% c("record_hour", "dpv"))]
   min_values <- as.numeric(sapply(features, function(feature) min(dpv_by_hour[, feature])))
   max_values <- as.numeric(sapply(features, function(feature) max(dpv_by_hour[, feature])))
-  
-  
+    
   GA <- ga(type = "real-valued", 
            fitness = function(x) custom_fitness(x[1], x[2], x[3], x[4], 
 		                                        x[5], x[6], x[7], x[8], 
@@ -74,10 +73,47 @@ optimize_ap_params <- function(dpv_by_hour)
   GA
 }
 
+#Obs: temp and humidity variables have reasonably low CVs.
+check_hourly_CVs <- function()
+{
+  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\Coefficient\\Coefficient.csv"
+  CVs <- read.csv(filename, header = T, stringsAsFactors = F)
+  columns <- colnames(CVs)
+  columns <- columns[!(columns %in% c("X", "recordtime"))]
+  for (column in columns)
+  {
+    
+	vec <- CVs[, column]
+	vec <- vec[!is.na(vec)]
+	med_vc <- median(vec)
+	if (med_vc <= 0.3)
+	{
+	 cat(paste("column = ", column, ", med_vc = ", med_vc, "\n", sep = ""))
+	 print(fivenum(vec))
+	}
+  }
+}
+
+jump_of_air_motor_within_an_hour <- function()
+{
+  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\BP1RobotAM1.csv"
+  BP1_1_Robot_AM <- read.csv(filename, header = T, stringsAsFactors = F)
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\jump_within_an_hour.png"
+  png(image_file, width = 800, height = 400)
+  BP1_1_Robot_AM$timestamp <- strptime(BP1_1_Robot_AM$X_c0, "%Y-%m-%d %H:%M:%S")
+  p <- ggplot(BP1_1_Robot_AM, aes(x = timestamp, y = value)) + geom_line() + scale_x_datetime(date_labels = "%H:%M:%S") + xlab("Time") + 
+       ylab("BP1 1 Robot Air Motor Speed") + theme(axis.text.x = element_text(size=12,color='black',face='bold'),
+	                                               axis.text.y = element_text(size=12,color='black',face='bold'))
+  print(p)
+  aux <- dev.off()
+  BP1_1_Robot_AM
+}
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_vs_activeplant.R")
-ics_activeplant <- load_ics_activeplant_data()
-dpv_by_hour <- compute_dpvs(ics_activeplant)
-dtree <<- build_dtree(dpv_by_hour)
-GA <- optimize_ap_params(dpv_by_hour)
+#ics_activeplant <- load_ics_activeplant_data()
+#dpv_by_hour <- compute_dpvs(ics_activeplant)
+#dtree <<- build_dtree(dpv_by_hour)
+#GA <- optimize_ap_params(dpv_by_hour)
+check_hourly_CVs()
+#BP1_1_Robot_AM <- jump_of_air_motor_within_an_hour()
 
 
