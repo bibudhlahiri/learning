@@ -41,106 +41,27 @@ create_per_vehicle_averages <- function()
   data.wide <- dcast(variables_by_vehicles, vin + n_defects ~ complete_varname, value.var = "average")
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
   write.table(data.wide, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
+  data.wide
 }
 
 shorten_eventname <- function(eventname)
 {
-  if (eventname == "Base Process 1")
-  {
-    return("BP1")
-  }
-  if (eventname == "Base Process 2")
-  {
-    return("BP2")
-  }
-  if (eventname == "C Booth Temp_Humidity")
-  {
-    return("TH")
-  }
-  if (eventname == "Clear Process 1")
-  {
-    return("CP1")
-  }
-  if (eventname == "Clear Process 2")
-  {
-    return("CP2")
-  }
+  eventnames <- c("Base Process 1", "Base Process 2", "C Booth Temp_Humidity", "Clear Process 1", "Clear Process 2")
+  short_eventnames <- c("BP1", "BP2", "TH", "CP1", "CP2")
+  short_eventnames[which(eventnames == eventname)]
 }
 
 shorten_variablename <- function(variablename)
 {
-  if (variablename == "1 Robot Air Motor")
-  {
-    return("1_Robot_AM")
-  }
-  if (variablename == "2 Robot Air Motor")
-  {
-    return("2_Robot_AM")
-  }
-  if (variablename == "3 Robot Air Motor")
-  {
-    return("3_Robot_AM")
-  }
-  if (variablename == "4 Robot Air Motor")
-  {
-    return("4_Robot_AM")
-  }
-  if (variablename == "1 Robot HV")
-  {
-    return("1_Robot_HV")
-  }
-  if (variablename == "2 Robot HV")
-  {
-    return("2_Robot_HV")
-  }
-  if (variablename == "3 Robot HV")
-  {
-    return("3_Robot_HV")
-  }
-  if (variablename == "4 Robot HV")
-  {
-    return("4_Robot_HV")
-  }
-  if (variablename == "Air House 1 Humidity")
-  {
-    return("AH_1_Hum")
-  }
-  if (variablename == "Air House 2 Humidity")
-  {
-    return("AH_2_Hum")
-  }
-  if (variablename == "Air House 3 Humidity")
-  {
-    return("AH_3_Hum")
-  }
-  if (variablename == "Air House 4 Humidity")
-  {
-    return("AH_4_Hum")
-  }
-  if (variablename == "Air House 5 Humidity")
-  {
-    return("AH_5_Hum")
-  }
-  if (variablename == "Air House 1 Temp")
-  {
-    return("AH_1_Temp")
-  }
-  if (variablename == "Air House 2 Temp")
-  {
-    return("AH_2_Temp")
-  }
-  if (variablename == "Air House 3 Temp")
-  {
-    return("AH_3_Temp")
-  }
-  if (variablename == "Air House 4 Temp")
-  {
-    return("AH_4_Temp")
-  }
-  if (variablename == "Air House 5 Temp")
-  {
-    return("AH_5_Temp")
-  }
+  variablenames <- c("1 Robot Air Motor", "2 Robot Air Motor", "3 Robot Air Motor", "4 Robot Air Motor", 
+                     "1 Robot HV", "2 Robot HV", "3 Robot HV", "4 Robot HV",
+					 "Air House 1 Humidity", "Air House 2 Humidity", "Air House 3 Humidity", "Air House 4 Humidity", "Air House 5 Humidity", 
+					 "Air House 1 Temp", "Air House 2 Temp", "Air House 3 Temp", "Air House 4 Temp", "Air House 5 Temp")
+  short_variablenames <- c("1_Robot_AM", "2_Robot_AM", "3_Robot_AM", "4_Robot_AM",
+                     "1_Robot_HV", "2_Robot_HV", "3_Robot_HV", "4_Robot_HV",
+					 "AH_1_Hum", "AH_2_Hum", "AH_3_Hum", "AH_4_Hum", "AH_5_Hum",
+					 "AH_1_Temp", "AH_2_Temp", "AH_3_Temp", "AH_4_Temp", "AH_5_Temp")
+  short_variablenames[which(variablenames == variablename)]
 }
 
 get_defect_report <- function(n_defects)
@@ -189,5 +110,5 @@ el_yunque <- function(F = 5, T = 50)
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_per_car.R")
 #median_CV_by_var <- primer_analysis_per_car_process_variable()
-#variables_by_vehicles <- create_per_vehicle_averages()
-primer_defects_per_car <- el_yunque()
+data.wide <- create_per_vehicle_averages()
+#primer_defects_per_car <- el_yunque()
