@@ -16,6 +16,8 @@ primer_analysis_per_car_process_variable <- function()
   variables_by_vehicles <- vins %>% select(vin, a.eventname, a.variablename, a.value) %>% group_by(vin, a.eventname, a.variablename) %>% summarise(average = mean(a.value), std_dev = sd(a.value))
   variables_by_vehicles$coeff_of_var <- ifelse((variables_by_vehicles$average == 0), 0, 
                                                variables_by_vehicles$std_dev/variables_by_vehicles$average) #200,544 rows
+  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\variables_by_vehicles.csv"
+  write.table(variables_by_vehicles, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
   median_CV_by_var <- variables_by_vehicles %>% ungroup() %>% select(a.eventname, a.variablename, coeff_of_var) %>% group_by(a.eventname, a.variablename) %>% summarise(median_CV = median(coeff_of_var))
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_median_CV_by_var.csv"
   write.table(median_CV_by_var, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
@@ -31,17 +33,21 @@ create_per_vehicle_averages <- function()
   #vins <- vins %>% filter(!((substr(a.eventname, 1, nchar(a.eventname) - 2) == "Base Process")
   #                          && (substr(a.variablename, 3, nchar(a.variablename)) == "Robot HV")))
   
-  variables_by_vehicles <- vins %>% select(vin, n_defects, a.eventname, a.variablename, a.value) %>% group_by(vin, n_defects, a.eventname, a.variablename) %>% summarise(average = mean(a.value))
-  #dataf <- unique(vins[, c("a.eventname", "a.variablename")])
+  #The number of defects are per vehicle and per discrepancy, not only per vehicle. Compute and save for joining later.
+  n_defects_per_vehicle <- vins %>% select(vin, h.discrepancy, n_defects) %>% group_by(vin, h.discrepancy) %>% summarise(disc_wise_prim_defects = mean(n_defects)) %>% ungroup() %>% select(vin, disc_wise_prim_defects) %>% group_by(vin) %>% summarise(tot_prim_defects = sum(disc_wise_prim_defects))
+    
+  variables_by_vehicles <- vins %>% select(vin, a.eventname, a.variablename, a.value) %>% group_by(vin, a.eventname, a.variablename) %>% summarise(average = mean(a.value))
   variables_by_vehicles$short_eventname <- apply(variables_by_vehicles, 1, function(row)shorten_eventname(as.character(row["a.eventname"])))
   variables_by_vehicles$short_variablename <- apply(variables_by_vehicles, 1, function(row)shorten_variablename(as.character(row["a.variablename"])))
   variables_by_vehicles$complete_varname <- paste(variables_by_vehicles$short_eventname, variables_by_vehicles$short_variablename, sep = "_")
   drops <- c("a.eventname", "a.variablename", "short_eventname", "short_variablename")
   variables_by_vehicles <- variables_by_vehicles[,!(names(variables_by_vehicles) %in% drops)]
-  data.wide <- dcast(variables_by_vehicles, vin + n_defects ~ complete_varname, value.var = "average")
+  primer_defects_per_car <- dcast(variables_by_vehicles, vin ~ complete_varname, value.var = "average")
+  primer_defects_per_car <- merge(primer_defects_per_car, n_defects_per_vehicle)
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
-  write.table(data.wide, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
-  data.wide
+  primer_defects_per_car$defect_report <- apply(primer_defects_per_car, 1, function(row)get_defect_report(as.numeric(row["tot_prim_defects"])))
+  write.table(primer_defects_per_car, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
+  primer_defects_per_car
 }
 
 shorten_eventname <- function(eventname)
@@ -64,9 +70,9 @@ shorten_variablename <- function(variablename)
   short_variablenames[which(variablenames == variablename)]
 }
 
-get_defect_report <- function(n_defects)
+get_defect_report <- function(tot_prim_defects)
 {
-  if (n_defects <= 3)
+  if (tot_prim_defects <= 3)
   {
     return("Acceptable")
   }
@@ -77,7 +83,6 @@ el_yunque <- function(F = 5, T = 50)
 {
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
   primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
-  primer_defects_per_car$defect_report <- apply(primer_defects_per_car, 1, function(row)get_defect_report(as.numeric(row["n_defects"])))
   primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
   
   #Save the output trees in a file named by the timestamp at which it is generated, so that multiple runs do not overwrite results
@@ -91,7 +96,7 @@ el_yunque <- function(F = 5, T = 50)
   for (i in 1:T)
   {
     features <- colnames(primer_defects_per_car)
-	features <- features[!(features %in% c("n_defects", "defect_report", "vin"))]
+	features <- features[!(features %in% c("tot_prim_defects", "defect_report", "vin"))]
 	sampled_features <- features[sample(length(features), F)]
 	formula_str <- paste("defect_report ~ ", paste(sampled_features, collapse = " + "), sep = "")
     #dtree <- rpart(as.formula(formula_str), data = primer_defects_per_car)
@@ -105,10 +110,35 @@ el_yunque <- function(F = 5, T = 50)
 	#}
   }
   sink()
+  dtree
+}
+
+viz_from_tree_output <- function(feature, cutpoint)
+{
+  #tree_node defines which group, based on a cutpoint on a feature, a data point belongs to, e.g., TH_AH_4_Temp <= 73.5 or TH_AH_4_Temp > 73.5
+  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
+  primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
+  primer_defects_per_car$tree_node <- ifelse((primer_defects_per_car[, feature] <= cutpoint), paste(feature, " <= ", cutpoint, sep = ""),
+                                             paste(feature, " > ", cutpoint, sep = ""))
+  pdpc_trans <- primer_defects_per_car %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = count/sum(count))
+  print(pdpc_trans)
+  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\",
+                      feature, "_", cutpoint, ".png", sep = "")
+  png(image_file, width = 600, height = 480, units = "px")
+  p <- ggplot(pdpc_trans, aes(x = factor(tree_node), y = perc*100, fill = defect_report)) +
+        geom_bar(stat = "identity", width = 0.7) +
+        labs(x = "tree_node", y = "percent", fill = "defect_report") +
+        theme_minimal(base_size = 14)
+  print(p)
+  dev.off()
   primer_defects_per_car
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_per_car.R")
 #median_CV_by_var <- primer_analysis_per_car_process_variable()
-data.wide <- create_per_vehicle_averages()
-#primer_defects_per_car <- el_yunque()
+#primer_defects_per_car <- create_per_vehicle_averages()
+#dtree <- el_yunque()
+primer_defects_per_car <- viz_from_tree_output("TH_AH_4_Temp", 73.5)
+primer_defects_per_car <- viz_from_tree_output("TH_AH_2_Temp", 73.7)
+primer_defects_per_car <- viz_from_tree_output("TH_AH_3_Temp", 68.9)
