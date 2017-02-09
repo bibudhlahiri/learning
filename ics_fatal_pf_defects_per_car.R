@@ -166,27 +166,58 @@ box_plots_for_AP_variables <- function(feature)
   dev.off()
 }
 
+generate_plots_from_dtree_output <- function(
+    filename = "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\Tree_output_2017_02_09_11_54_24.txt")
+{
+  lines <- readLines(filename) 
+  n_lines <- length(lines)
+  df_features_cutpoints <- data.frame(feature = character(), cutpoint = numeric(), statistic = numeric(0), stringsAsFactors = FALSE)
+                      
+  row_number <- 1
+  for (i in 1:n_lines)
+  {
+    line <- lines[i]
+	if ((substr(line, 1, 3) == "1) ") && (grepl("criterion", line)))
+	{
+	  print(line)
+	  tokens <- unlist(strsplit(substr(line, 4, nchar(line)), ";"))
+	  print(tokens)
+	  feature_cutpoint <- unlist(strsplit(tokens[1], "<="))
+	  print(feature_cutpoint)
+	  df_features_cutpoints[row_number, "feature"] <- substr(feature_cutpoint[1], 1, nchar(feature_cutpoint[1]) - 1)
+	  df_features_cutpoints[row_number, "cutpoint"] <- substr(feature_cutpoint[2], 2, nchar(feature_cutpoint[2]))
+	  crit_stat <- unlist(strsplit(tokens[2], ","))
+	  stat_val <- unlist(strsplit(crit_stat[2], "="))
+	  print(stat_val)
+	  df_features_cutpoints[row_number, "statistic"] <- as.numeric(substr(stat_val[2], 2, nchar(stat_val[2])))
+	  row_number <- row_number + 1
+	}
+  }
+  print(unique(df_features_cutpoints))
+}
+
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_per_car.R")
 #median_CV_by_var <- primer_analysis_per_car_process_variable()
 #primer_defects_per_car <- create_per_vehicle_averages()
 #dtree <- el_yunque()
 #Based on Tree_output_2017_02_09_11_54_24.txt
-viz_from_tree_output("TH_AH_4_Temp", 73.5)
-viz_from_tree_output("TH_AH_2_Temp", 73.7)
-viz_from_tree_output("TH_AH_3_Temp", 72.1)
-viz_from_tree_output("TH_AH_2_Hum", 70.0729)
-viz_from_tree_output("TH_AH_5_Temp", 71.9)
-viz_from_tree_output("TH_AH_5_Hum", 67.8787)
-viz_from_tree_output("TH_AH_3_Hum", 69.1204)
-viz_from_tree_output("TH_AH_1_Hum", 69.8113)
-viz_from_tree_output("TH_AH_1_Temp", 72.4)
+#viz_from_tree_output("TH_AH_4_Temp", 73.5)
+#viz_from_tree_output("TH_AH_2_Temp", 73.7)
+#viz_from_tree_output("TH_AH_3_Temp", 72.1)
+#viz_from_tree_output("TH_AH_2_Hum", 70.0729)
+#viz_from_tree_output("TH_AH_5_Temp", 71.9)
+#viz_from_tree_output("TH_AH_5_Hum", 67.8787)
+#viz_from_tree_output("TH_AH_3_Hum", 69.1204)
+#viz_from_tree_output("TH_AH_1_Hum", 69.8113)
+#viz_from_tree_output("TH_AH_1_Temp", 72.4)
 
-box_plots_for_AP_variables("TH_AH_4_Temp")
-box_plots_for_AP_variables("TH_AH_2_Temp")
-box_plots_for_AP_variables("TH_AH_3_Temp")
-box_plots_for_AP_variables("TH_AH_2_Hum")
-box_plots_for_AP_variables("TH_AH_5_Temp")
-box_plots_for_AP_variables("TH_AH_5_Hum")
-box_plots_for_AP_variables("TH_AH_3_Hum")
-box_plots_for_AP_variables("TH_AH_1_Hum")
-box_plots_for_AP_variables("TH_AH_1_Temp")
+#box_plots_for_AP_variables("TH_AH_4_Temp")
+#box_plots_for_AP_variables("TH_AH_2_Temp")
+#box_plots_for_AP_variables("TH_AH_3_Temp")
+#box_plots_for_AP_variables("TH_AH_2_Hum")
+#box_plots_for_AP_variables("TH_AH_5_Temp")
+#box_plots_for_AP_variables("TH_AH_5_Hum")
+#box_plots_for_AP_variables("TH_AH_3_Hum")
+#box_plots_for_AP_variables("TH_AH_1_Hum")
+#box_plots_for_AP_variables("TH_AH_1_Temp")
+lines <- generate_plots_from_dtree_output()
