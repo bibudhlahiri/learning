@@ -44,8 +44,15 @@ create_per_vehicle_averages <- function()
   variables_by_vehicles <- variables_by_vehicles[,!(names(variables_by_vehicles) %in% drops)]
   primer_defects_per_car <- dcast(variables_by_vehicles, vin ~ complete_varname, value.var = "average")
   primer_defects_per_car <- merge(primer_defects_per_car, n_defects_per_vehicle)
-  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
+  
   primer_defects_per_car$defect_report <- apply(primer_defects_per_car, 1, function(row)get_defect_report(as.numeric(row["tot_prim_defects"])))
+  
+  #Replace outlier values by medians of corresponding columns
+  features <- colnames(primer_defects_per_car)
+  features <- features[!(features %in% c("vin", "tot_prim_defects", "defect_report"))]
+  primer_defects_per_car[features] <- lapply(primer_defects_per_car[features], outlier)
+  
+  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
   write.table(primer_defects_per_car, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
   primer_defects_per_car
 }
@@ -118,27 +125,68 @@ viz_from_tree_output <- function(feature, cutpoint)
   #tree_node defines which group, based on a cutpoint on a feature, a data point belongs to, e.g., TH_AH_4_Temp <= 73.5 or TH_AH_4_Temp > 73.5
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
   primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
-  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
+  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)  
   primer_defects_per_car$tree_node <- ifelse((primer_defects_per_car[, feature] <= cutpoint), paste(feature, " <= ", cutpoint, sep = ""),
                                              paste(feature, " > ", cutpoint, sep = ""))
   pdpc_trans <- primer_defects_per_car %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = count/sum(count))
   print(pdpc_trans)
-  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\",
+  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\",
                       feature, "_", cutpoint, ".png", sep = "")
   png(image_file, width = 600, height = 480, units = "px")
+  cbbPalette <- c("#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
   p <- ggplot(pdpc_trans, aes(x = factor(tree_node), y = perc*100, fill = defect_report)) +
-        geom_bar(stat = "identity", width = 0.7) +
+        geom_bar(stat = "identity", width = 0.7) + scale_fill_manual(values = cbbPalette) + 
         labs(x = "tree_node", y = "percent", fill = "defect_report") +
-        theme_minimal(base_size = 14)
+        theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
+	          axis.text.y = element_text(size = 12, color = 'black', face = 'bold'))
   print(p)
   dev.off()
-  primer_defects_per_car
+}
+
+#Convert the outliers of each column (outlier is any point that is less than the 25% quartile minus 1.5 times the IQR 
+#OR more than the 75% quartile plus 1.5 times the IQR) into the median
+outlier <- function(x) {
+ x[((x < quantile(x, 0.25, na.rm = TRUE) - 1.5 * IQR(x, na.rm = TRUE)) | (x > quantile(x, 0.75, na.rm = TRUE) + 1.5 * IQR(x, na.rm = TRUE)) | (is.na(x)))] <- median(x, na.rm = TRUE)
+ x
+}
+
+box_plots_for_AP_variables <- function(feature)
+{
+  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
+  primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
+  
+  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\box_plots_ap_vars\\",
+                      feature, ".png", sep = "")
+  png(image_file, width = 600, height = 480, units = "px")
+  p <- ggplot(primer_defects_per_car, aes(factor(defect_report), get(feature))) + geom_boxplot() + 
+       labs(x = "Defect report", y = feature) + theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
+	                                               axis.text.y = element_text(size = 12, color = 'black', face = 'bold'))
+  print(p)
+  dev.off()
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_per_car.R")
 #median_CV_by_var <- primer_analysis_per_car_process_variable()
 #primer_defects_per_car <- create_per_vehicle_averages()
 #dtree <- el_yunque()
-primer_defects_per_car <- viz_from_tree_output("TH_AH_4_Temp", 73.5)
-primer_defects_per_car <- viz_from_tree_output("TH_AH_2_Temp", 73.7)
-primer_defects_per_car <- viz_from_tree_output("TH_AH_3_Temp", 68.9)
+#Based on Tree_output_2017_02_09_11_54_24.txt
+viz_from_tree_output("TH_AH_4_Temp", 73.5)
+viz_from_tree_output("TH_AH_2_Temp", 73.7)
+viz_from_tree_output("TH_AH_3_Temp", 72.1)
+viz_from_tree_output("TH_AH_2_Hum", 70.0729)
+viz_from_tree_output("TH_AH_5_Temp", 71.9)
+viz_from_tree_output("TH_AH_5_Hum", 67.8787)
+viz_from_tree_output("TH_AH_3_Hum", 69.1204)
+viz_from_tree_output("TH_AH_1_Hum", 69.8113)
+viz_from_tree_output("TH_AH_1_Temp", 72.4)
+
+box_plots_for_AP_variables("TH_AH_4_Temp")
+box_plots_for_AP_variables("TH_AH_2_Temp")
+box_plots_for_AP_variables("TH_AH_3_Temp")
+box_plots_for_AP_variables("TH_AH_2_Hum")
+box_plots_for_AP_variables("TH_AH_5_Temp")
+box_plots_for_AP_variables("TH_AH_5_Hum")
+box_plots_for_AP_variables("TH_AH_3_Hum")
+box_plots_for_AP_variables("TH_AH_1_Hum")
+box_plots_for_AP_variables("TH_AH_1_Temp")
