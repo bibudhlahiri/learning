@@ -5,6 +5,7 @@ library(ggplot2)
 library(rpart)
 library(reshape2)
 library(party)
+library(gridExtra)
 
 #Analyze the variance per variables per process per car and take means, SD and CV.
 #Do not analyze by hour. 
@@ -126,8 +127,9 @@ viz_from_tree_output <- function(feature, cutpoint)
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
   primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
   primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)  
-  primer_defects_per_car$tree_node <- ifelse((primer_defects_per_car[, feature] <= cutpoint), paste(feature, " <= ", cutpoint, sep = ""),
-                                             paste(feature, " > ", cutpoint, sep = ""))
+  primer_defects_per_car$tree_node <- ifelse((primer_defects_per_car[, feature] <= cutpoint), paste(" <= ", cutpoint, sep = ""),
+                                             paste(" > ", cutpoint, sep = ""))
+  #primer_defects_per_car$tree_node <- gsub("TH_AH_", "AH", primer_defects_per_car$tree_node)
   pdpc_trans <- primer_defects_per_car %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = count/sum(count))
   print(pdpc_trans)
   image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\",
@@ -136,10 +138,31 @@ viz_from_tree_output <- function(feature, cutpoint)
   cbbPalette <- c("#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
   p <- ggplot(pdpc_trans, aes(x = factor(tree_node), y = perc*100, fill = defect_report)) +
         geom_bar(stat = "identity", width = 0.7) + scale_fill_manual(values = cbbPalette) + 
-        labs(x = "tree_node", y = "percent", fill = "defect_report") +
+        labs(x = "tree_node", y = "percent", fill = "defect_report") + ggtitle(feature) + 
         theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
-	          axis.text.y = element_text(size = 12, color = 'black', face = 'bold'))
+	          axis.text.y = element_text(size = 12, color = 'black', face = 'bold'),
+			  plot.title = element_text(lineheight = .8, face = "bold"))
   print(p)
+  dev.off()
+  p
+}
+
+barplot_grid_view_from_tree_output <- function(df_features_cutpoints, how_many = 6)
+{
+  gp1 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
+  gp2 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
+  gp3 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
+  gp4 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
+  
+  frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
+                             #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
+                            )
+  grob <- grid.grab()
+
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\barplot_grid_view.png"
+  png(image_file, width = 700, height = 700)
+  grid.newpage()
+  grid.draw(grob)
   dev.off()
 }
 
@@ -192,8 +215,9 @@ generate_plots_from_dtree_output <- function(
   df_features_cutpoints <- unique(df_features_cutpoints)
   df_features_cutpoints <- df_features_cutpoints[order(-df_features_cutpoints$statistic),] 
   
-  apply(df_features_cutpoints, 1, function(row)viz_from_tree_output(as.character(row["feature"]), as.numeric(row["cutpoint"])))
-  apply(df_features_cutpoints, 1, function(row)box_plots_for_AP_variables(as.character(row["feature"])))
+  #apply(df_features_cutpoints, 1, function(row)viz_from_tree_output(as.character(row["feature"]), as.numeric(row["cutpoint"])))
+  #apply(df_features_cutpoints, 1, function(row)box_plots_for_AP_variables(as.character(row["feature"])))
+  barplot_grid_view_from_tree_output(df_features_cutpoints)
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_per_car.R")
