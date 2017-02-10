@@ -179,21 +179,21 @@ generate_plots_from_dtree_output <- function(
     line <- lines[i]
 	if ((substr(line, 1, 3) == "1) ") && (grepl("criterion", line)))
 	{
-	  print(line)
 	  tokens <- unlist(strsplit(substr(line, 4, nchar(line)), ";"))
-	  print(tokens)
 	  feature_cutpoint <- unlist(strsplit(tokens[1], "<="))
-	  print(feature_cutpoint)
 	  df_features_cutpoints[row_number, "feature"] <- substr(feature_cutpoint[1], 1, nchar(feature_cutpoint[1]) - 1)
 	  df_features_cutpoints[row_number, "cutpoint"] <- substr(feature_cutpoint[2], 2, nchar(feature_cutpoint[2]))
 	  crit_stat <- unlist(strsplit(tokens[2], ","))
 	  stat_val <- unlist(strsplit(crit_stat[2], "="))
-	  print(stat_val)
 	  df_features_cutpoints[row_number, "statistic"] <- as.numeric(substr(stat_val[2], 2, nchar(stat_val[2])))
 	  row_number <- row_number + 1
 	}
   }
-  print(unique(df_features_cutpoints))
+  df_features_cutpoints <- unique(df_features_cutpoints)
+  df_features_cutpoints <- df_features_cutpoints[order(-df_features_cutpoints$statistic),] 
+  
+  apply(df_features_cutpoints, 1, function(row)viz_from_tree_output(as.character(row["feature"]), as.numeric(row["cutpoint"])))
+  apply(df_features_cutpoints, 1, function(row)box_plots_for_AP_variables(as.character(row["feature"])))
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_per_car.R")
@@ -220,4 +220,4 @@ generate_plots_from_dtree_output <- function(
 #box_plots_for_AP_variables("TH_AH_3_Hum")
 #box_plots_for_AP_variables("TH_AH_1_Hum")
 #box_plots_for_AP_variables("TH_AH_1_Temp")
-lines <- generate_plots_from_dtree_output()
+generate_plots_from_dtree_output()
