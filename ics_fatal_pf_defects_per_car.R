@@ -121,7 +121,7 @@ el_yunque <- function(F = 5, T = 50)
   dtree
 }
 
-viz_from_tree_output <- function(feature, cutpoint)
+bar_plots_for_AP_variables <- function(feature, cutpoint)
 {
   #tree_node defines which group, based on a cutpoint on a feature, a data point belongs to, e.g., TH_AH_4_Temp <= 73.5 or TH_AH_4_Temp > 73.5
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
@@ -147,23 +147,16 @@ viz_from_tree_output <- function(feature, cutpoint)
   p
 }
 
-barplot_grid_view_from_tree_output <- function(df_features_cutpoints, how_many = 6)
+barplot_grid_view_from_tree_output <- function(df_features_cutpoints, how_many = 4)
 {
-  gp1 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
-  gp2 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
-  gp3 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
-  gp4 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
+  gp1 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
+  gp2 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
+  gp3 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
+  gp4 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
   
   frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
                              #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
                             )
-  grob <- grid.grab()
-
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\barplot_grid_view.png"
-  png(image_file, width = 700, height = 700)
-  grid.newpage()
-  grid.draw(grob)
-  dev.off()
 }
 
 #Convert the outliers of each column (outlier is any point that is less than the 25% quartile minus 1.5 times the IQR 
@@ -187,6 +180,28 @@ box_plots_for_AP_variables <- function(feature)
 	                                               axis.text.y = element_text(size = 12, color = 'black', face = 'bold'))
   print(p)
   dev.off()
+  p
+}
+
+boxplot_grid_view_from_tree_output <- function(df_features_cutpoints, how_many = 4)
+{
+  gp1 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(df_features_cutpoints[1, "feature"])))
+  gp2 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(df_features_cutpoints[2, "feature"])))
+  gp3 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(df_features_cutpoints[3, "feature"])))
+  gp4 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(df_features_cutpoints[4, "feature"])))
+  
+  frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
+                             #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
+                            )
+  grob <- grid.grab()
+
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\box_plots_ap_vars\\boxplot_grid_view.png"
+  png(image_file, width = 700, height = 700)
+  grid.newpage()
+  grid.draw(grob)
+  dev.off()
+  
+  frame_grob
 }
 
 generate_plots_from_dtree_output <- function(
@@ -215,9 +230,10 @@ generate_plots_from_dtree_output <- function(
   df_features_cutpoints <- unique(df_features_cutpoints)
   df_features_cutpoints <- df_features_cutpoints[order(-df_features_cutpoints$statistic),] 
   
-  #apply(df_features_cutpoints, 1, function(row)viz_from_tree_output(as.character(row["feature"]), as.numeric(row["cutpoint"])))
+  #apply(df_features_cutpoints, 1, function(row)bar_plots_for_AP_variables(as.character(row["feature"]), as.numeric(row["cutpoint"])))
   #apply(df_features_cutpoints, 1, function(row)box_plots_for_AP_variables(as.character(row["feature"])))
-  barplot_grid_view_from_tree_output(df_features_cutpoints)
+  #frame_grob <- barplot_grid_view_from_tree_output(df_features_cutpoints)
+  frame_grob <- boxplot_grid_view_from_tree_output(df_features_cutpoints)
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_per_car.R")
@@ -225,15 +241,15 @@ generate_plots_from_dtree_output <- function(
 #primer_defects_per_car <- create_per_vehicle_averages()
 #dtree <- el_yunque()
 #Based on Tree_output_2017_02_09_11_54_24.txt
-#viz_from_tree_output("TH_AH_4_Temp", 73.5)
-#viz_from_tree_output("TH_AH_2_Temp", 73.7)
-#viz_from_tree_output("TH_AH_3_Temp", 72.1)
-#viz_from_tree_output("TH_AH_2_Hum", 70.0729)
-#viz_from_tree_output("TH_AH_5_Temp", 71.9)
-#viz_from_tree_output("TH_AH_5_Hum", 67.8787)
-#viz_from_tree_output("TH_AH_3_Hum", 69.1204)
-#viz_from_tree_output("TH_AH_1_Hum", 69.8113)
-#viz_from_tree_output("TH_AH_1_Temp", 72.4)
+#bar_plots_for_AP_variables("TH_AH_4_Temp", 73.5)
+#bar_plots_for_AP_variables("TH_AH_2_Temp", 73.7)
+#bar_plots_for_AP_variables("TH_AH_3_Temp", 72.1)
+#bar_plots_for_AP_variables("TH_AH_2_Hum", 70.0729)
+#bar_plots_for_AP_variables("TH_AH_5_Temp", 71.9)
+#bar_plots_for_AP_variables("TH_AH_5_Hum", 67.8787)
+#bar_plots_for_AP_variables("TH_AH_3_Hum", 69.1204)
+#bar_plots_for_AP_variables("TH_AH_1_Hum", 69.8113)
+#bar_plots_for_AP_variables("TH_AH_1_Temp", 72.4)
 
 #box_plots_for_AP_variables("TH_AH_4_Temp")
 #box_plots_for_AP_variables("TH_AH_2_Temp")
@@ -244,4 +260,4 @@ generate_plots_from_dtree_output <- function(
 #box_plots_for_AP_variables("TH_AH_3_Hum")
 #box_plots_for_AP_variables("TH_AH_1_Hum")
 #box_plots_for_AP_variables("TH_AH_1_Temp")
-generate_plots_from_dtree_output()
+frame_grob <- generate_plots_from_dtree_output()
