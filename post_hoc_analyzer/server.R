@@ -35,7 +35,7 @@ el_yunque <- function(primer_defects_per_car, F = 5, T = 50)
   opfile
 }
 
-viz_from_tree_output <- function(feature, cutpoint)
+bar_plots_for_AP_variables <- function(feature, cutpoint)
 {
   #tree_node defines which group, based on a cutpoint on a feature, a data point belongs to, e.g., TH_AH_4_Temp <= 73.5 or TH_AH_4_Temp > 73.5
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
@@ -63,17 +63,48 @@ viz_from_tree_output <- function(feature, cutpoint)
 
 barplot_grid_view_from_tree_output <- function(df_features_cutpoints, how_many = 4)
 {
-  gp1 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
-  gp2 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
-  gp3 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
-  gp4 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
+  gp1 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
+  gp2 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
+  gp3 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
+  gp4 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
   
   frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
                              #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
                             )
 }
 
-generate_plots_from_dtree_output <- function(filename)
+box_plots_for_AP_variables <- function(feature)
+{
+  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
+  primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
+  
+  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\box_plots_ap_vars\\",
+                      feature, ".png", sep = "")
+  png(image_file, width = 600, height = 480, units = "px")
+  p <- ggplot(primer_defects_per_car, aes(factor(defect_report), get(feature))) + geom_boxplot() + 
+       labs(x = "Defect report", y = feature) + theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
+	                                               axis.text.y = element_text(size = 12, color = 'black', face = 'bold'))
+  print(p)
+  dev.off()
+  p
+}
+
+boxplot_grid_view_from_tree_output <- function(df_features_cutpoints, how_many = 4)
+{
+  cat("In boxplot_grid_view_from_tree_output\n")
+  gp1 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(df_features_cutpoints[1, "feature"])))
+  gp2 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(df_features_cutpoints[2, "feature"])))
+  gp3 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(df_features_cutpoints[3, "feature"])))
+  gp4 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(df_features_cutpoints[4, "feature"])))
+  
+  frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
+                             #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
+                            )  
+  frame_grob
+}
+
+generate_plots_from_dtree_output <- function(filename, view)
 {
   lines <- readLines(filename) 
   n_lines <- length(lines)
@@ -99,19 +130,18 @@ generate_plots_from_dtree_output <- function(filename)
   df_features_cutpoints <- df_features_cutpoints[order(-df_features_cutpoints$statistic),] 
   df_features_cutpoints <- df_features_cutpoints[1:4, ] #Keep top 4 on dashboard
   
-  frame_grob <- barplot_grid_view_from_tree_output(df_features_cutpoints)
+  frame_grob <- ifelse((view == "bar_plot"), barplot_grid_view_from_tree_output(df_features_cutpoints),
+                                               boxplot_grid_view_from_tree_output(df_features_cutpoints))
 }
 
 generate_dtree_and_plot <- function(user_inputs)
 {
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
   primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
-  #primer_defects_per_car$defect_report <- apply(primer_defects_per_car, 1, function(row)get_defect_report(as.numeric(row["tot_prim_defects"],
-  #                                                                                                        as.numeric(user_inputs[["threshold"]]))))
   primer_defects_per_car$defect_report <- ifelse((primer_defects_per_car$tot_prim_defects <= user_inputs[["threshold"]]), "Acceptable", "Unacceptable")
   primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
   opfile <- el_yunque(primer_defects_per_car, F = 5, T = 50)
-  frame_grob <- generate_plots_from_dtree_output(opfile)
+  frame_grob <- generate_plots_from_dtree_output(opfile, user_inputs[["view"]])
 }
 
 shinyServer(function(input, output) {
