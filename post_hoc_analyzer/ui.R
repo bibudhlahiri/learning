@@ -8,6 +8,10 @@ shinyUI(fluidPage(
 	    column(3, numericInput("threshold", "Threshold on no. of defects (between 0 and 13):", 3, min = 0, max = 13))
 	   ),
 	   fluidRow(column(6, h3(""))),
+	   fluidRow( 
+         column(1, helpText("")),	   
+         submitButton("Analyze with Plots")
+       ),
 	   mainPanel(
          plotOutput("plotFromTreeOutput")
     )
@@ -16,4 +20,4 @@ shinyUI(fluidPage(
 
 #setwd("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code")
 #library(shiny)
-#runApp("toyota_post_hoc")
+#runApp("post_hoc_analyzer")

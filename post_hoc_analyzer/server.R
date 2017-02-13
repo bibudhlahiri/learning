@@ -1,4 +1,9 @@
 library(shiny)
+library(party)
+library(ggplot2)
+library(gridExtra)
+library(plyr)
+library(dplyr)
 
 el_yunque <- function(primer_defects_per_car, F = 5, T = 50)
 {  
@@ -30,6 +35,44 @@ el_yunque <- function(primer_defects_per_car, F = 5, T = 50)
   opfile
 }
 
+viz_from_tree_output <- function(feature, cutpoint)
+{
+  #tree_node defines which group, based on a cutpoint on a feature, a data point belongs to, e.g., TH_AH_4_Temp <= 73.5 or TH_AH_4_Temp > 73.5
+  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
+  primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)  
+  primer_defects_per_car$tree_node <- ifelse((primer_defects_per_car[, feature] <= cutpoint), paste(" <= ", cutpoint, sep = ""),
+                                             paste(" > ", cutpoint, sep = ""))
+  #primer_defects_per_car$tree_node <- gsub("TH_AH_", "AH", primer_defects_per_car$tree_node)
+  pdpc_trans <- primer_defects_per_car %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = count/sum(count))
+  print(pdpc_trans)
+  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\",
+                      feature, "_", cutpoint, ".png", sep = "")
+  png(image_file, width = 600, height = 480, units = "px")
+  cbbPalette <- c("#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+  p <- ggplot(pdpc_trans, aes(x = factor(tree_node), y = perc*100, fill = defect_report)) +
+        geom_bar(stat = "identity", width = 0.7) + scale_fill_manual(values = cbbPalette) + 
+        labs(x = "tree_node", y = "percent", fill = "defect_report") + ggtitle(feature) + 
+        theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
+	          axis.text.y = element_text(size = 12, color = 'black', face = 'bold'),
+			  plot.title = element_text(lineheight = .8, face = "bold"))
+  print(p)
+  dev.off()
+  p
+}
+
+barplot_grid_view_from_tree_output <- function(df_features_cutpoints, how_many = 4)
+{
+  gp1 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
+  gp2 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
+  gp3 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
+  gp4 <- ggplot_gtable(ggplot_build(viz_from_tree_output(df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
+  
+  frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
+                             #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
+                            )
+}
+
 generate_plots_from_dtree_output <- function(filename)
 {
   lines <- readLines(filename) 
@@ -54,10 +97,9 @@ generate_plots_from_dtree_output <- function(filename)
   }
   df_features_cutpoints <- unique(df_features_cutpoints)
   df_features_cutpoints <- df_features_cutpoints[order(-df_features_cutpoints$statistic),] 
-  df_features_cutpoints <- df_features_cutpoints[1:6, ] #Keep top 6 on dashboard
+  df_features_cutpoints <- df_features_cutpoints[1:4, ] #Keep top 4 on dashboard
   
-  apply(df_features_cutpoints, 1, function(row)viz_from_tree_output(as.character(row["feature"]), as.numeric(row["cutpoint"])))
-  apply(df_features_cutpoints, 1, function(row)box_plots_for_AP_variables(as.character(row["feature"])))
+  frame_grob <- barplot_grid_view_from_tree_output(df_features_cutpoints)
 }
 
 generate_dtree_and_plot <- function(user_inputs)
@@ -69,7 +111,7 @@ generate_dtree_and_plot <- function(user_inputs)
   primer_defects_per_car$defect_report <- ifelse((primer_defects_per_car$tot_prim_defects <= user_inputs[["threshold"]]), "Acceptable", "Unacceptable")
   primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
   opfile <- el_yunque(primer_defects_per_car, F = 5, T = 50)
-  generate_plots_from_dtree_output(opfile)
+  frame_grob <- generate_plots_from_dtree_output(opfile)
 }
 
 shinyServer(function(input, output) {
