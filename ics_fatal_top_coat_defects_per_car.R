@@ -8,7 +8,7 @@ library(party)
 library(gridExtra)
 
 filepath_prefix <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\"
-#filepath_prefix <- "/home/impadmin/richa/data03/users/hyadav/"
+#filepath_prefix <- "/home/impadmin/richa/"
 
 #Analyze the variance per variables per process per car and take means, SD and CV.
 #Do not analyze by hour. 
@@ -36,20 +36,19 @@ create_per_vehicle_averages <- function()
   filename <- paste(filepath_prefix, "top_coat_sample.csv", sep = "")
   vins <- read.csv(filename, header = T, stringsAsFactors = F) 
   vins <- vins %>% filter(substr(variablename, nchar(variablename) - 4, nchar(variablename)) != "Color")
-  print(table(vins$n_defects))
   vins$n_defects[(vins$n_defects == "NULL")] <- 0
-  print(table(vins$n_defects))
   vins$n_defects <- as.numeric(vins$n_defects)
   
   #The number of defects are per vehicle and per discrepancy, not only per vehicle. Compute and save for joining later.
   n_defects_per_vehicle <- vins %>% select(vin, discrepancy, n_defects) %>% group_by(vin, discrepancy) %>% summarise(disc_wise_tc_defects = mean(n_defects)) %>% ungroup() %>% select(vin, disc_wise_tc_defects) %>% group_by(vin) %>% summarise(tot_tc_defects = sum(disc_wise_tc_defects))
-    
+  #Keep the manufacturing date for each vehicle, so that we can apply the tree model on a window of last one month's data and validate.   
+  manuf_dates_of_vehicles <- vins %>% select(vin, recordtime) %>% mutate(recorddate = substr(recordtime, 1, 10)) %>% select(vin, recorddate) %>% group_by(vin) %>% summarise(manuf_date = max(recorddate))
+  print(manuf_dates_of_vehicles)
+  
   variables_by_vehicles <- vins %>% select(vin, eventname, variablename, value) %>% group_by(vin, eventname, variablename) %>% summarise(average = mean(value))
   variables_by_vehicles$short_eventname <- apply(variables_by_vehicles, 1, function(row)shorten_eventname(as.character(row["eventname"])))
   variables_by_vehicles$short_variablename <- apply(variables_by_vehicles, 1, function(row)shorten_variablename(as.character(row["variablename"])))
-  variables_by_vehicles$complete_varname <- paste(variables_by_vehicles$short_eventname, variables_by_vehicles$short_variablename, sep = "_")
-  
-  
+  variables_by_vehicles$complete_varname <- paste(variables_by_vehicles$short_eventname, variables_by_vehicles$short_variablename, sep = "_")  
   
   drops <- c("eventname", "variablename", "short_eventname", "short_variablename")
   variables_by_vehicles <- variables_by_vehicles[,!(names(variables_by_vehicles) %in% drops)]
@@ -65,6 +64,9 @@ create_per_vehicle_averages <- function()
   features <- colnames(tc_defects_per_car)
   features <- features[!(features %in% c("vin", "tot_tc_defects"))]
   tc_defects_per_car[features] <- lapply(tc_defects_per_car[features], outlier)
+  
+  #Add the manufacturing dates to the vehicles for validating the tree model
+  tc_defects_per_car <- merge(tc_defects_per_car, manuf_dates_of_vehicles)
   
   filename <- paste(filepath_prefix, "tc_defects_per_car.csv", sep = "")
   write.table(tc_defects_per_car, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
@@ -94,21 +96,20 @@ shorten_variablename <- function(variablename)
   short_variablenames[which(variablenames == variablename)]
 }
 
-get_defect_report <- function(tot_tc_defects)
+#TODO: Validate the performance of model built on historical data on recent data by classification error, precision and recall.
+#Keep the trees which give best performance on recent data.
+el_yunque <- function(F = 5, T = 1, threshold)
 {
-  if (tot_tc_defects <= 3)
-  {
-    return("Acceptable")
-  }
-  else return("Unacceptable")
-}
-
-el_yunque <- function(F = 5, T = 50, threshold)
-{
+  library(DMwR)
   filename <- paste(filepath_prefix, "tc_defects_per_car.csv", sep = "")
   tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
   tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
+  #tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_tc_defects <= threshold), 0, 1)
   tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
+  #For training, use data excluding last one month's 
+  tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
+  historical_data <- subset(tc_defects_per_car, !((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))  
+  recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))
   
   #Save the output trees in a file named by the timestamp at which it is generated, so that multiple runs do not overwrite results
   timestr <- as.character(Sys.time())
@@ -117,38 +118,53 @@ el_yunque <- function(F = 5, T = 50, threshold)
   timestr <- gsub(":", "_", timestr)
   opfile <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\Tree_outputs\\top_coat\\Tree_output_", timestr, ".txt", sep = "")
   
-  sink(file = opfile)
+  #sink(file = opfile)
   for (i in 1:T)
   {
-    features <- colnames(tc_defects_per_car)
-	features <- features[!(features %in% c("tot_tc_defects", "defect_report", "vin"))]
+    features <- colnames(historical_data)
+	features <- features[!(features %in% c("tot_tc_defects", "defect_report", "vin", "manuf_date"))]
 	sampled_features <- features[sample(length(features), F)]
 	formula_str <- paste("defect_report ~ ", paste(sampled_features, collapse = " + "), sep = "")
-    #dtree <- rpart(as.formula(formula_str), data = tc_defects_per_car)
-	dtree <- ctree(as.formula(formula_str), data = tc_defects_per_car, controls = ctree_control(maxdepth = 2))
-	#if (!is.null(dtree$splits))
-	#{
-	  #No point in printing decision trees with root node only
-	  cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
-	  print(dtree)
-	  #print_dtree(dtree)
-	#}
+	print(class(historical_data$defect_report))
+	
+	#historical_data has 18% from Unacceptable class for threshold = 0
+    print(table(historical_data$defect_report))
+    #Apply SMOTE on historical_data to oversample minority class and undersample majority class
+    #historical_data <- SMOTE(as.formula(formula_str), historical_data, perc.over = 200, perc.under = 100)
+    #print(table(historical_data$defect_report))
+  
+	#Creating decision stumps only as this will give insights easy to interpret
+	#dtree <- ctree(as.formula(formula_str), data = historical_data, controls = ctree_control(maxdepth = 1))
+	dtree <- SMOTE(as.formula(formula_str), data = historical_data[, c(sampled_features, "defect_report")], 
+	                     perc.over = 200, perc.under = 100, learner = 'rpartXse', control = rpart.control(maxdepth = 2), se = 0.5)
+	#preds <- predict(dtree, recent_data)
+	#preds <- predict(dtree)
+	#cont_tab <- table(recent_data$defect_report, preds)
+	#cont_tab <- table(historical_data$defect_report, preds)
+	
+	#We treat Unacceptable as positive class since we want to detect defects
+	#recall <- cont_tab[2,2]/sum(cont_tab[2,])
+	#precision <- cont_tab[2,1]/sum(cont_tab[,2])	
+	#cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
+	#print(cont_tab)
+	#cat(paste("recall = ", recall, ", precision = ", precision, "\n", sep = ""))
+	print(dtree)  
   }
-  sink()
+  #sink()
   dtree
 }
 
-bar_plots_for_AP_variables <- function(tc_defects_per_car, feature, cutpoint)
+bar_plots_for_AP_variables <- function(data_mode, input_data, feature, cutpoint)
 {
   #tree_node defines which group, based on a cutpoint on a feature, a data point belongs to, e.g., TH_AH_4_Temp <= 73.5 or TH_AH_4_Temp > 73.5  
-  tc_defects_per_car$tree_node <- ifelse((tc_defects_per_car[, feature] <= cutpoint), paste(" <= ", cutpoint, sep = ""),
+  input_data$tree_node <- ifelse((input_data[, feature] <= cutpoint), paste(" <= ", cutpoint, sep = ""),
                                              paste(" > ", cutpoint, sep = ""))
-  #tc_defects_per_car$tree_node <- gsub("TH_AH_", "AH", tc_defects_per_car$tree_node)
-  pdpc_trans <- tc_defects_per_car %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = count/sum(count))
+  pdpc_trans <- input_data %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = count/sum(count))
   print(feature)
   print(pdpc_trans)
-  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\top_coat\\",
-                      feature, "_", cutpoint, ".png", sep = "")
+  image_file <- 
+    paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\top_coat\\",
+          feature, "_", cutpoint, "_", data_mode, ".png", sep = "")
   png(image_file, width = 600, height = 480, units = "px")
   cbbPalette <- c("#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
   p <- ggplot(pdpc_trans, aes(x = factor(tree_node), y = perc*100, fill = defect_report)) +
@@ -162,19 +178,21 @@ bar_plots_for_AP_variables <- function(tc_defects_per_car, feature, cutpoint)
   p
 }
 
-barplot_grid_view_from_tree_output <- function(tc_defects_per_car, df_features_cutpoints, how_many = 4)
+barplot_grid_view_from_tree_output <- function(data_mode, input_data, df_features_cutpoints, how_many = 4)
 {
-  gp1 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(tc_defects_per_car, df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
-  gp2 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(tc_defects_per_car, df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
-  gp3 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(tc_defects_per_car, df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
-  gp4 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(tc_defects_per_car, df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
+  gp1 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
+  gp2 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
+  gp3 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
+  gp4 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
   
   frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
                              #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
                             )
   grob <- grid.grab()
   
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\top_coat\\barplot_grid_view.png"
+  image_file <- 
+  paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\top_coat\\barplot_grid_view_",
+        data_mode, ".png", sep = "")
   png(image_file, width = 700, height = 700)
   grid.newpage()
   grid.draw(grob)
@@ -233,8 +251,7 @@ boxplot_grid_view_from_tree_output <- function(tc_defects_per_car, df_features_c
   frame_grob
 }
 
-generate_plots_from_dtree_output <- function(threshold = 0, 
-    filename = "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\Tree_outputs\\top_coat\\Tree_output_2017_02_14_16_56_00.txt")
+generate_plots_from_dtree_output <- function(threshold = 0, filename)
 {
   lines <- readLines(filename) 
   n_lines <- length(lines)
@@ -267,12 +284,20 @@ generate_plots_from_dtree_output <- function(threshold = 0,
   tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
   tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
   
-  frame_grob <- barplot_grid_view_from_tree_output(tc_defects_per_car, df_features_cutpoints)
-  frame_grob <- boxplot_grid_view_from_tree_output(tc_defects_per_car, df_features_cutpoints)
+  tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
+  #76% of the data is historical
+  historical_data <- subset(tc_defects_per_car, !((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))
+  frame_grob <- barplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints)
+  #frame_grob <- boxplot_grid_view_from_tree_output(tc_defects_per_car, df_features_cutpoints)
+  
+  #Validate the tree models on last one month's data using the bar plot for now
+  recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))
+  frame_grob <- barplot_grid_view_from_tree_output(data_mode = "recent", recent_data, df_features_cutpoints)
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_top_coat_defects_per_car.R")
 #median_CV_by_var <- top_coat_analysis_per_car_process_variable()
 #tc_defects_per_car <- create_per_vehicle_averages()
-#dtree <- el_yunque(threshold = 0)
-frame_grob <- generate_plots_from_dtree_output()
+dtree <- el_yunque(threshold = 0)
+#Note the filename before running generate_plots_from_dtree_output()
+#frame_grob <- generate_plots_from_dtree_output(filename = "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\Tree_outputs\\top_coat\\Tree_output_2017_02_15_12_51_13.txt")
