@@ -252,23 +252,22 @@ parse_tree_output <- function(model_file)
   df_features_cutpoints
 } 
   
-generate_plots_from_dtree_output <- function(threshold = 0, model_file)
+generate_plots_from_dtree_output <- function(history_win_in_months = 2, window_end = "2016-12-22", threshold = 0)
 {
-  df_features_cutpoints <- parse_tree_output(model_file)  
-  #apply(df_features_cutpoints, 1, function(row)bar_plots_for_AP_variables(as.character(row["feature"]), as.numeric(row["cutpoint"])))
-  #apply(df_features_cutpoints, 1, function(row)box_plots_for_AP_variables(as.character(row["feature"])))
-  
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\tc_defects_per_car.csv"
   tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
   tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
   tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
-  
   tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
-  #76% of the data is historical
-  historical_data <- subset(tc_defects_per_car, !((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))
-  frame_grob <- barplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints)
-  #frame_grob <- boxplot_grid_view_from_tree_output(tc_defects_per_car, df_features_cutpoints)
   
+  start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", history_win_in_months, " months", sep = ""))[2])
+  historical_data <- subset(tc_defects_per_car, ((manuf_date >= start_date) & (manuf_date <= window_end)))
+
+  model_file <- el_yunque(historical_data, F = 5, T = 50)
+  df_features_cutpoints <- parse_tree_output(model_file)
+  
+  frame_grob <- barplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints)
+    
   #Validate the tree models on last one month's data using the bar plot for now
   recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))
   frame_grob <- barplot_grid_view_from_tree_output(data_mode = "recent", recent_data, df_features_cutpoints)
@@ -289,17 +288,13 @@ find_daily_volumes <- function()
   write.table(volumes_per_day, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
 }
 
-#To deal with concept drift, find what window on historical data produces the minimum difference between 
-#patterns found from historical data and recent data. The end date for historical data should be 22/12/2016 and 
-#go back 1 month, 2 months etc. 
-find_optimal_window_for_training_model <- function(history_win_in_months = 1, window_end = "2016-12-22", threshold = 0, how_many_from_pdpc = 5)
+#Generate a score for a given window size.
+score_window_size <- function(tc_defects_per_car, history_win_in_months = 1, window_end = "2016-12-22", threshold = 0, how_many_from_pdpc = 4)
 {
-  start_date <- as.character(as.Date(window_end) - history_win_in_months*30)
-  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\tc_defects_per_car.csv"
-  tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
-  tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
-  tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
-  tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
+  #start_date <- as.character(as.Date(window_end) - history_win_in_months*30)
+  start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", history_win_in_months, " months", sep = ""))[2])
+  cat(paste("start_date = ", start_date, "\n", sep = ""))
+  
   historical_data <- subset(tc_defects_per_car, ((manuf_date >= start_date) & (manuf_date <= window_end)))  
   recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))
   
@@ -333,9 +328,44 @@ find_optimal_window_for_training_model <- function(history_win_in_months = 1, wi
   pdpc_all$perc.y[is.na(pdpc_all$perc.y)] <- 0
   pdpc_all$perc.x[is.na(pdpc_all$perc.x)] <- 0
   print(pdpc_all)
-  cosine_sim <- (pdpc_all$perc.x %*% pdpc_all$perc.y)/(sqrt(sum(pdpc_all$perc.x^2))*sqrt(sum(pdpc_all$perc.y^2)))
   manhattan_distance <- sum(abs(pdpc_all$perc.x - pdpc_all$perc.y))
-  cat(paste("For history_win_in_months = ", history_win_in_months, ", cosine_sim = ", cosine_sim, ", manhattan_distance = ", manhattan_distance, "\n", sep = ""))
+  cat(paste("For history_win_in_months = ", history_win_in_months, ", manhattan_distance = ", manhattan_distance, "\n", sep = ""))
+  manhattan_distance
+}
+
+#To deal with concept drift, find what window on historical data produces the minimum difference between 
+#patterns found from historical data and recent data. The end date for historical data should be 22/12/2016 and 
+#go back 1 month, 2 months etc. 
+find_optimal_window_for_training_model <- function(threshold = 0)
+{
+  filename <- paste(filepath_prefix, "tc_defects_per_car.csv", sep = "")
+  tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
+  tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
+  tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
+  
+  win_len_and_score <- data.frame(win_len = 1:12)
+  win_len_and_score$score <- apply(win_len_and_score, 1, function(row)score_window_size(tc_defects_per_car, 
+                                                                                        as.numeric(row["win_len"])))
+  print(win_len_and_score)
+  filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
+  write.table(win_len_and_score, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
+  win_len_and_score
+}
+
+plot_win_len_and_score <- function()
+{
+  filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
+  win_len_and_score <- read.csv(filename, header = T, stringsAsFactors = F) 
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\top_coat\\win_len_and_score.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(win_len_and_score, aes(x = win_len, y = score)) + geom_line() + geom_point() + 
+       scale_x_continuous(breaks = win_len_and_score$win_len, labels = as.character(win_len_and_score$win_len)) + 
+	   theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
+	         axis.text.y = element_text(size = 12, color = 'black', face = 'bold')) + 
+       xlab("Window length for historical training data (in months)") + ylab("Manhattan distance between historical and recent data")
+  print(p)
+  aux <- dev.off()
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_top_coat_defects_per_car.R")
@@ -343,5 +373,7 @@ find_optimal_window_for_training_model <- function(history_win_in_months = 1, wi
 #tc_defects_per_car <- create_per_vehicle_averages()
 #dtree <- el_yunque(threshold = 0)
 #Note the filename before running generate_plots_from_dtree_output()
-#frame_grob <- generate_plots_from_dtree_output(filename = "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\Tree_outputs\\top_coat\\Tree_output_2017_02_15_18_56_34.txt")
-cosine_sim <- find_optimal_window_for_training_model(history_win_in_months = 4)
+frame_grob <- generate_plots_from_dtree_output()
+#cosine_sim <- find_optimal_window_for_training_model(history_win_in_months = 4)
+#win_len_and_score <- find_optimal_window_for_training_model(threshold = 0)
+#plot_win_len_and_score()
