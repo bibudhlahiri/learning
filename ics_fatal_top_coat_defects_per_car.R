@@ -330,7 +330,7 @@ score_window_size <- function(tc_defects_per_car, history_win_in_months = 1, win
   print(pdpc_all)
   manhattan_distance <- sum(abs(pdpc_all$perc.x - pdpc_all$perc.y))
   cat(paste("For history_win_in_months = ", history_win_in_months, ", manhattan_distance = ", manhattan_distance, "\n", sep = ""))
-  manhattan_distance
+  pdpc_historical
 }
 
 #To deal with concept drift, find what window on historical data produces the minimum difference between 
@@ -368,12 +368,32 @@ plot_win_len_and_score <- function()
   aux <- dev.off()
 }
 
+#Compute utility score for a model, by checking how much the fraction of unacceptable cars changes when the 
+#attributes cross cut-points identified by the decision trees.
+compute_utility_score <- function(history_win_in_months, threshold = 0)
+{
+  filename <- paste(filepath_prefix, "tc_defects_per_car.csv", sep = "")
+  tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
+  tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
+  tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
+  pdpc_historical <- score_window_size(tc_defects_per_car, history_win_in_months)
+  unacc <- subset(pdpc_historical, (defect_report == "Unacceptable"))
+  unacc$which_side <- ifelse((substr(unacc$tree_node, 1, 2) == ' >'), "greater_than", "less_than")
+  unacc <- unacc[, c("feature", "which_side", "perc")]
+  unacc_wide <- dcast(unacc, feature ~ which_side, value.var = "perc")
+  utility <- sum(abs(unacc_wide$greater_than - unacc_wide$less_than))
+  cat(paste("For history_win_in_months = ", history_win_in_months, ", utility = ", utility, "\n", sep = ""))
+  utility
+}
+
+
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_top_coat_defects_per_car.R")
 #median_CV_by_var <- top_coat_analysis_per_car_process_variable()
 #tc_defects_per_car <- create_per_vehicle_averages()
 #dtree <- el_yunque(threshold = 0)
 #Note the filename before running generate_plots_from_dtree_output()
-frame_grob <- generate_plots_from_dtree_output()
-#cosine_sim <- find_optimal_window_for_training_model(history_win_in_months = 4)
+#frame_grob <- generate_plots_from_dtree_output()
 #win_len_and_score <- find_optimal_window_for_training_model(threshold = 0)
 #plot_win_len_and_score()
+utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
