@@ -288,65 +288,75 @@ find_daily_volumes <- function()
   write.table(volumes_per_day, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
 }
 
-#Generate a score for a given window size.
-score_window_size <- function(tc_defects_per_car, history_win_in_months = 1, window_end = "2016-12-22", threshold = 0, how_many_from_pdpc = 4)
+get_pdpc_historical_or_recent <- function(input_data, data_mode, how_many_from_pdpc, df_features_cutpoints)
 {
-  #start_date <- as.character(as.Date(window_end) - history_win_in_months*30)
-  start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", history_win_in_months, " months", sep = ""))[2])
-  cat(paste("start_date = ", start_date, "\n", sep = ""))
-  
-  historical_data <- subset(tc_defects_per_car, ((manuf_date >= start_date) & (manuf_date <= window_end)))  
-  recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))
-  
-  #Build tree model on historical data
-  model_file <- el_yunque(historical_data)
-  #Get the variables used for splitting the root nodes, their cut-points and statistic values
-  df_features_cutpoints <- parse_tree_output(model_file)  
-  
+  pdpc <- data.frame(feature = character(), tree_node = character(), defect_report = character(), 
+                     count = numeric(0), perc = numeric(0), stringsAsFactors = FALSE)
+  for (i in 1:how_many_from_pdpc)
+  {
+    pdpc_this_row <- as.data.frame(get_pdpc(input_data, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"]))
+	pdpc_this_row$feature <- df_features_cutpoints[i, "feature"]
+	pdpc <- rbind(pdpc, pdpc_this_row)
+  }
+  pdpc$data_mode <- data_mode
+  pdpc
+}
+
+#Generate a score for a given window size.
+score_window_size <- function(historical_data, recent_data, df_features_cutpoints, how_many_from_pdpc = 4)
+{
   #Apply df_features_cutpoints on historical data to get the percentage of acceptable and unacceptable cars 
   #in the children of root nodes of the trees (we call it pdpc). Get the pdpc for historical window first.   
-  pdpc_historical <- data.frame(feature = character(), tree_node = character(), defect_report = character(), count = numeric(0), perc = numeric(0), stringsAsFactors = FALSE)
-  for (i in 1:how_many_from_pdpc)
-  {
-    pdpc_this_row <- as.data.frame(get_pdpc(historical_data, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"]))
-	pdpc_this_row$feature <- df_features_cutpoints[i, "feature"]
-	pdpc_historical <- rbind(pdpc_historical, pdpc_this_row)
-  }
-  pdpc_historical$data_mode <- "historical"
-    
+  pdpc_historical <- get_pdpc_historical_or_recent(historical_data, "historical", how_many_from_pdpc, df_features_cutpoints)  
   #Now, get the pdpc for the recent window.
-  pdpc_recent <- data.frame(feature = character(), tree_node = character(), defect_report = character(), count = numeric(0), perc = numeric(0), stringsAsFactors = FALSE)
-  for (i in 1:how_many_from_pdpc)
-  {
-    pdpc_this_row <- as.data.frame(get_pdpc(recent_data, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"]))
-	pdpc_this_row$feature <- df_features_cutpoints[i, "feature"]
-	pdpc_recent <- rbind(pdpc_recent, pdpc_this_row)
-  }
-  pdpc_recent$data_mode <- "recent"
+  pdpc_recent <- get_pdpc_historical_or_recent(recent_data, "recent", how_many_from_pdpc, df_features_cutpoints)
     
   pdpc_all <- merge(x = pdpc_historical, y = pdpc_recent, by = c("feature", "tree_node", "defect_report"), all = TRUE)
   pdpc_all$perc.y[is.na(pdpc_all$perc.y)] <- 0
   pdpc_all$perc.x[is.na(pdpc_all$perc.x)] <- 0
   print(pdpc_all)
   manhattan_distance <- sum(abs(pdpc_all$perc.x - pdpc_all$perc.y))
-  cat(paste("For history_win_in_months = ", history_win_in_months, ", manhattan_distance = ", manhattan_distance, "\n", sep = ""))
-  pdpc_historical
+}
+
+#Compute utility score for a model, by checking how much the fraction of unacceptable cars changes when the 
+#attributes cross cut-points identified by the decision trees.
+compute_utility_score <- function(historical_data, df_features_cutpoints, how_many_from_pdpc = 4)
+{
+  pdpc_historical <- get_pdpc_historical_or_recent(historical_data, "historical", how_many_from_pdpc, df_features_cutpoints)  
+  unacc <- subset(pdpc_historical, (defect_report == "Unacceptable"))
+  unacc$which_side <- ifelse((substr(unacc$tree_node, 1, 2) == ' >'), "greater_than", "less_than")
+  unacc <- unacc[, c("feature", "which_side", "perc")]
+  unacc_wide <- dcast(unacc, feature ~ which_side, value.var = "perc")
+  utility <- sum(abs(unacc_wide$greater_than - unacc_wide$less_than))
 }
 
 #To deal with concept drift, find what window on historical data produces the minimum difference between 
 #patterns found from historical data and recent data. The end date for historical data should be 22/12/2016 and 
-#go back 1 month, 2 months etc. 
-find_optimal_window_for_training_model <- function(threshold = 0)
+#go back 1 month, 2 months etc. Also compute the utility score. Build the model within this method and pass on the same info
+#to both score_window_size() and compute_utility_score(), so they work on the same model file (i.e., model based on same window
+#size on historical data).
+find_optimal_window_for_training_model <- function(window_end = "2016-12-22", threshold = 0)
 {
   filename <- paste(filepath_prefix, "tc_defects_per_car.csv", sep = "")
   tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
   tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
   tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
   tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
+  recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08"))) #Does not depend on window size
+  win_len_and_score <- data.frame(win_len = 1:12, generalization_score = rep(0,12), utility_score = rep(0,12), stringsAsFactors = FALSE)
   
-  win_len_and_score <- data.frame(win_len = 1:12)
-  win_len_and_score$score <- apply(win_len_and_score, 1, function(row)score_window_size(tc_defects_per_car, 
-                                                                                        as.numeric(row["win_len"])))
+  for (i in 1:12)
+  {
+    start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", win_len_and_score[i, "win_len"], " months", sep = ""))[2])
+    cat(paste("i = ", i, ", start_date = ", start_date, "\n", sep = ""))  
+    historical_data <- subset(tc_defects_per_car, ((manuf_date >= start_date) & (manuf_date <= window_end)))  
+    #Build tree model on historical data
+    model_file <- el_yunque(historical_data)
+    #Get the variables used for splitting the root nodes, their cut-points and statistic values
+    df_features_cutpoints <- parse_tree_output(model_file)
+	win_len_and_score[i, "generalization_score"] <- score_window_size(historical_data, recent_data, df_features_cutpoints)
+	win_len_and_score[i, "utility_score"] <- compute_utility_score(historical_data, df_features_cutpoints)
+  }
   print(win_len_and_score)
   filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
   write.table(win_len_and_score, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
@@ -368,25 +378,6 @@ plot_win_len_and_score <- function()
   aux <- dev.off()
 }
 
-#Compute utility score for a model, by checking how much the fraction of unacceptable cars changes when the 
-#attributes cross cut-points identified by the decision trees.
-compute_utility_score <- function(history_win_in_months, threshold = 0)
-{
-  filename <- paste(filepath_prefix, "tc_defects_per_car.csv", sep = "")
-  tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
-  tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
-  tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
-  tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
-  pdpc_historical <- score_window_size(tc_defects_per_car, history_win_in_months)
-  unacc <- subset(pdpc_historical, (defect_report == "Unacceptable"))
-  unacc$which_side <- ifelse((substr(unacc$tree_node, 1, 2) == ' >'), "greater_than", "less_than")
-  unacc <- unacc[, c("feature", "which_side", "perc")]
-  unacc_wide <- dcast(unacc, feature ~ which_side, value.var = "perc")
-  utility <- sum(abs(unacc_wide$greater_than - unacc_wide$less_than))
-  cat(paste("For history_win_in_months = ", history_win_in_months, ", utility = ", utility, "\n", sep = ""))
-  utility
-}
-
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_top_coat_defects_per_car.R")
 #median_CV_by_var <- top_coat_analysis_per_car_process_variable()
@@ -394,6 +385,6 @@ compute_utility_score <- function(history_win_in_months, threshold = 0)
 #dtree <- el_yunque(threshold = 0)
 #Note the filename before running generate_plots_from_dtree_output()
 #frame_grob <- generate_plots_from_dtree_output()
-#win_len_and_score <- find_optimal_window_for_training_model(threshold = 0)
+win_len_and_score <- find_optimal_window_for_training_model(threshold = 0)
 #plot_win_len_and_score()
-utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
+#utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
