@@ -440,11 +440,12 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
     model_file <- el_yunque(historical_data)
     #Get the variables used for splitting the root nodes, their cut-points and statistic values
     df_features_cutpoints <- parse_tree_output(model_file)
-	win_len_and_score[i, "generalization_score"] <- score_window_size(historical_data, recent_data, df_features_cutpoints)
-	win_len_and_score[i, "utility_score_on_historical"] <- compute_utility_score(historical_data, "historical", df_features_cutpoints)
-	win_len_and_score[i, "utility_score_on_recent"] <- compute_utility_score(recent_data, "recent", df_features_cutpoints)
+	hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #Not getting even 4 features when threshold = 2
 	
-	compute_utility_score
+	win_len_and_score[i, "generalization_score"] <- score_window_size(historical_data, recent_data, df_features_cutpoints, how_many_from_pdpc = hmfp)
+	win_len_and_score[i, "utility_score_on_historical"] <- compute_utility_score(historical_data, "historical", df_features_cutpoints, 
+	                                                                             how_many_from_pdpc = hmfp)
+	win_len_and_score[i, "utility_score_on_recent"] <- compute_utility_score(recent_data, "recent", df_features_cutpoints, how_many_from_pdpc = hmfp)
   }
   print(win_len_and_score)
   filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
@@ -464,4 +465,4 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
 #plot_win_len_and_score()
 #utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
 #check_weekly_windows(threshold = 0)
-win_len_and_score <- find_optimal_window_for_training_model_by_week()
+win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 2)
