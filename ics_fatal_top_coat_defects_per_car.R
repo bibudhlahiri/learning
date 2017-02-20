@@ -335,7 +335,7 @@ compute_utility_score <- function(historical_data, df_features_cutpoints, how_ma
 #go back 1 month, 2 months etc. Also compute the utility score. Build the model within this method and pass on the same info
 #to both score_window_size() and compute_utility_score(), so they work on the same model file (i.e., model based on same window
 #size on historical data).
-find_optimal_window_for_training_model <- function(window_end = "2016-12-22", threshold = 0)
+find_optimal_window_for_training_model_by_month <- function(window_end = "2016-12-22", threshold = 0)
 {
   filename <- paste(filepath_prefix, "tc_defects_per_car.csv", sep = "")
   tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
@@ -378,6 +378,65 @@ plot_win_len_and_score <- function()
   aux <- dev.off()
 }
 
+#Check weekly window, take last one month's data, train on first 3 weeks and test on last one week.
+#Observation: utility_score is sort of low (0.0887), but generalization_score is good (0.2477). 
+#Reason: Model trained on historical data is identifying cut-points in temperature where
+#very few data points (sometimes none) in recent data are crossing those cut-points.  
+#This is using BP2_3_Robot_HV and BP2_4_Robot_HV, in addition to TH_AH_1_Temp and TH_AH_4_Temp.
+check_weekly_windows <- function(threshold = 0)
+{
+  filename <- paste(filepath_prefix, "tc_defects_per_car.csv", sep = "")
+  tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
+  tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
+  tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
+  
+  recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-02-02") & (manuf_date <= "2017-02-08"))) 
+  historical_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-01-03") & (manuf_date < "2017-02-02")))
+  #historical_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-01-12") & (manuf_date < "2017-02-02")))
+  
+  #Build tree model on historical data
+  model_file <- el_yunque(historical_data)
+  #Get the variables used for splitting the root nodes, their cut-points and statistic values
+  df_features_cutpoints <- parse_tree_output(model_file)
+  generalization_score <- score_window_size(historical_data, recent_data, df_features_cutpoints)
+  utility_score <- compute_utility_score(historical_data, df_features_cutpoints)
+  cat(paste("generalization_score = ", generalization_score, ", utility_score = ", utility_score, "\n", sep = ""))
+}
+
+#Take last one week for validation, and n number of weeks before that for training. Make sure to drop the
+#shutdown period from training data. Last date for training data is given by window_end, which is 2017-02-01.
+find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown = "2016-12-23", last_day_of_shutdown = "2017-01-02", 
+                                                           window_end = "2017-02-01", threshold = 0)
+{
+  filename <- paste(filepath_prefix, "tc_defects_per_car.csv", sep = "")
+  tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
+  tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
+  tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
+  recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-02-02") & (manuf_date <= "2017-02-08")))  #Does not depend on window size
+  win_len_and_score <- data.frame(win_len = 4:12, generalization_score = rep(0,9), utility_score = rep(0,9), stringsAsFactors = FALSE)
+  
+  for (i in 1:9)
+  {
+    start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", win_len_and_score[i, "win_len"], " weeks", sep = ""))[2])
+    cat(paste("i = ", i, ", win_len_and_score[i, win_len] = ", win_len_and_score[i, "win_len"], ", start_date = ", start_date, "\n", sep = ""))  
+    historical_data <- subset(tc_defects_per_car, ((manuf_date >= start_date) & (manuf_date <= window_end))) 
+	#Eliminate data corresponding to shutdown period (2016-12-23 to 2017-01-02)
+	historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
+	
+    #Build tree model on historical data
+    model_file <- el_yunque(historical_data)
+    #Get the variables used for splitting the root nodes, their cut-points and statistic values
+    df_features_cutpoints <- parse_tree_output(model_file)
+	win_len_and_score[i, "generalization_score"] <- score_window_size(historical_data, recent_data, df_features_cutpoints)
+	win_len_and_score[i, "utility_score"] <- compute_utility_score(historical_data, df_features_cutpoints)
+  }
+  print(win_len_and_score)
+  filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
+  write.table(win_len_and_score, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
+  win_len_and_score
+}
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_top_coat_defects_per_car.R")
 #median_CV_by_var <- top_coat_analysis_per_car_process_variable()
@@ -385,6 +444,10 @@ plot_win_len_and_score <- function()
 #dtree <- el_yunque(threshold = 0)
 #Note the filename before running generate_plots_from_dtree_output()
 #frame_grob <- generate_plots_from_dtree_output()
-win_len_and_score <- find_optimal_window_for_training_model(threshold = 0)
+#At threshold = 2, the decision tree algorithm does not generate any real tree at all since 
+#only 4% of the vehicles have more than 2 defects
+#win_len_and_score <- find_optimal_window_for_training_model_by_month(threshold = 2)
 #plot_win_len_and_score()
 #utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
+#check_weekly_windows(threshold = 0)
+win_len_and_score <- find_optimal_window_for_training_model_by_week()
