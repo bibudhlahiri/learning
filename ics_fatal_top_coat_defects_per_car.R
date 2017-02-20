@@ -419,9 +419,19 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
   
   for (i in 1:9)
   {
-    start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", win_len_and_score[i, "win_len"], " weeks", sep = ""))[2])
-    cat(paste("i = ", i, ", win_len_and_score[i, win_len] = ", win_len_and_score[i, "win_len"], ", start_date = ", start_date, "\n", sep = ""))  
-    historical_data <- subset(tc_defects_per_car, ((manuf_date >= start_date) & (manuf_date <= window_end))) 
+    start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", (7*win_len_and_score[i, "win_len"]-1), " days", sep = ""))[2])
+	#If the start_date computed initially falls on or before the shutdown, check how many days we are losing because of shutdown, and 
+	#adjust those many days from days before shutdown. Shutdown was for 11 days, including both ends.
+	revised_start_date <- start_date
+	if (start_date <= last_day_of_shutdown)
+	{
+	  lost_days <- as.numeric(difftime(as.Date(last_day_of_shutdown, '%Y-%m-%d'), as.Date(start_date, '%Y-%m-%d'), units = c("days"))) + 1
+	  last_day_before_shutdown <- as.character(seq(as.Date(first_day_of_shutdown), length = 2, by = "-1 days")[2])
+      revised_start_date <-  as.character(seq(as.Date(last_day_before_shutdown), length = 2, by = paste("-", (lost_days - 1), " days", sep = ""))[2])
+	}
+    cat(paste("i = ", i, ", win_len_and_score[i, win_len] = ", win_len_and_score[i, "win_len"], 
+	          ", start_date = ", start_date, ", revised_start_date = ", revised_start_date, "\n", sep = ""))  
+    historical_data <- subset(tc_defects_per_car, ((manuf_date >= revised_start_date) & (manuf_date <= window_end))) 
 	#Eliminate data corresponding to shutdown period (2016-12-23 to 2017-01-02)
 	historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
 	
