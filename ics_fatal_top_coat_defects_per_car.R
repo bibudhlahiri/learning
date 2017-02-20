@@ -320,10 +320,10 @@ score_window_size <- function(historical_data, recent_data, df_features_cutpoint
 
 #Compute utility score for a model, by checking how much the fraction of unacceptable cars changes when the 
 #attributes cross cut-points identified by the decision trees.
-compute_utility_score <- function(historical_data, df_features_cutpoints, how_many_from_pdpc = 4)
+compute_utility_score <- function(input_data, data_mode, df_features_cutpoints, how_many_from_pdpc = 4)
 {
-  pdpc_historical <- get_pdpc_historical_or_recent(historical_data, "historical", how_many_from_pdpc, df_features_cutpoints)  
-  unacc <- subset(pdpc_historical, (defect_report == "Unacceptable"))
+  pdpc <- get_pdpc_historical_or_recent(input_data, data_mode, how_many_from_pdpc, df_features_cutpoints)  
+  unacc <- subset(pdpc, (defect_report == "Unacceptable"))
   unacc$which_side <- ifelse((substr(unacc$tree_node, 1, 2) == ' >'), "greater_than", "less_than")
   unacc <- unacc[, c("feature", "which_side", "perc")]
   unacc_wide <- dcast(unacc, feature ~ which_side, value.var = "perc")
@@ -415,7 +415,8 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
   tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
   tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
   recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-02-02") & (manuf_date <= "2017-02-08")))  #Does not depend on window size
-  win_len_and_score <- data.frame(win_len = 4:12, generalization_score = rep(0,9), utility_score = rep(0,9), stringsAsFactors = FALSE)
+  win_len_and_score <- data.frame(win_len = 4:12, generalization_score = rep(0,9), utility_score_on_historical = rep(0,9), 
+                                  utility_score_on_recent = rep(0,9), stringsAsFactors = FALSE)
   
   for (i in 1:9)
   {
@@ -440,7 +441,10 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
     #Get the variables used for splitting the root nodes, their cut-points and statistic values
     df_features_cutpoints <- parse_tree_output(model_file)
 	win_len_and_score[i, "generalization_score"] <- score_window_size(historical_data, recent_data, df_features_cutpoints)
-	win_len_and_score[i, "utility_score"] <- compute_utility_score(historical_data, df_features_cutpoints)
+	win_len_and_score[i, "utility_score_on_historical"] <- compute_utility_score(historical_data, "historical", df_features_cutpoints)
+	win_len_and_score[i, "utility_score_on_recent"] <- compute_utility_score(recent_data, "recent", df_features_cutpoints)
+	
+	compute_utility_score
   }
   print(win_len_and_score)
   filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
