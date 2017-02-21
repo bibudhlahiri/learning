@@ -1,4 +1,4 @@
-#This analysis is the one that started after we got the feedback from Tara on 29/11/2016 (about REPAIR_TERMINAL , 2-level grid etc).
+#This analysis is the one that we did on primer after the entire defect data became available on the cluster.
 library(plyr)
 library(dplyr)
 library(ggplot2)
@@ -33,17 +33,14 @@ create_per_vehicle_averages <- function()
   filename <- paste(filepath_prefix, "NewPrimerAP_sample.csv", sep = "")
   vins <- read.csv(filename, header = T, stringsAsFactors = F) 
   vins <- vins %>% filter(substr(variablename, nchar(variablename) - 4, nchar(variablename)) != "Color")
-  #Drop all Robot HV variables for Base Processes 1 and 2 as their median CVs are all 0.
-  #vins <- vins %>% filter(!((substr(a.eventname, 1, nchar(a.eventname) - 2) == "Base Process")
-  #                          && (substr(a.variablename, 3, nchar(a.variablename)) == "Robot HV")))
+  vins$n_defects[(vins$n_defects == "NULL")] <- 0
+  vins$n_defects <- as.numeric(vins$n_defects)
   
   #The number of defects are per vehicle and per discrepancy, not only per vehicle. Compute and save for joining later.
-  print(table(vins$n_defects))
-  vins$n_defects[(vins$n_defects == "NULL")] <- 0
-  print(table(vins$n_defects))
-  vins$n_defects <- as.numeric(vins$n_defects)
   n_defects_per_vehicle <- vins %>% select(vin, discrepancy, n_defects) %>% group_by(vin, discrepancy) %>% summarise(disc_wise_prim_defects = mean(n_defects)) %>% ungroup() %>% select(vin, disc_wise_prim_defects) %>% group_by(vin) %>% summarise(tot_prim_defects = sum(disc_wise_prim_defects))
-    
+  #Keep the manufacturing date for each vehicle, so that we can apply the tree model on a window of last one month's data and validate.   
+  manuf_dates_of_vehicles <- vins %>% select(vin, recordtime) %>% mutate(recorddate = substr(recordtime, 1, 10)) %>% select(vin, recorddate) %>% group_by(vin) %>% summarise(manuf_date = max(recorddate))
+  
   variables_by_vehicles <- vins %>% select(vin, eventname, variablename, value) %>% group_by(vin, eventname, variablename) %>% summarise(average = mean(value))
   variables_by_vehicles$short_eventname <- apply(variables_by_vehicles, 1, function(row)shorten_eventname(as.character(row["eventname"])))
   variables_by_vehicles$short_variablename <- apply(variables_by_vehicles, 1, function(row)shorten_variablename(as.character(row["variablename"])))
@@ -53,14 +50,15 @@ create_per_vehicle_averages <- function()
   primer_defects_per_car <- dcast(variables_by_vehicles, vin ~ complete_varname, value.var = "average")
   primer_defects_per_car <- merge(primer_defects_per_car, n_defects_per_vehicle)
   
-  primer_defects_per_car$defect_report <- apply(primer_defects_per_car, 1, function(row)get_defect_report(as.numeric(row["tot_prim_defects"])))
-  
   #Replace outlier values by medians of corresponding columns
   features <- colnames(primer_defects_per_car)
   features <- features[!(features %in% c("vin", "tot_prim_defects", "defect_report"))]
   primer_defects_per_car[features] <- lapply(primer_defects_per_car[features], outlier)
   
-  filename <- paste(filepath_prefix, "primer_defects_per_car_new.csv", sep = "")
+  #Add the manufacturing dates to the vehicles for validating the tree model
+  primer_defects_per_car <- merge(primer_defects_per_car, manuf_dates_of_vehicles)
+  
+  filename <- paste(filepath_prefix, "primer_defects_per_car.csv", sep = "")
   write.table(primer_defects_per_car, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
   print(table(primer_defects_per_car$tot_prim_defects))
   #Result on new whole data (total 102694 unique vehicles, 6.6% have some primer defect):
@@ -89,63 +87,49 @@ shorten_variablename <- function(variablename)
   short_variablenames[which(variablenames == variablename)]
 }
 
-get_defect_report <- function(tot_prim_defects)
+el_yunque <- function(input_data, F = 5, T = 50)
 {
-  if (tot_prim_defects <= 3)
-  {
-    return("Acceptable")
-  }
-  else return("Unacceptable")
-}
-
-el_yunque <- function(F = 5, T = 50, threshold)
-{
-  filename <- paste(filepath_prefix, "primer_defects_per_car_new.csv", sep = "")
-  primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
-  primer_defects_per_car$defect_report <- ifelse((primer_defects_per_car$tot_prim_defects <= threshold), "Acceptable", "Unacceptable")
-  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
-  
   #Save the output trees in a file named by the timestamp at which it is generated, so that multiple runs do not overwrite results
   timestr <- as.character(Sys.time())
   timestr <- gsub("-", "_", timestr)
   timestr <- gsub(" ", "_", timestr)
   timestr <- gsub(":", "_", timestr)
-  opfile <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\Tree_outputs\\Tree_output_", timestr, ".txt", sep = "")
-  
+  opfile <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\Tree_outputs\\primer\\Tree_output_", timestr, ".txt", sep = "")
   sink(file = opfile)
   for (i in 1:T)
   {
-    features <- colnames(primer_defects_per_car)
-	features <- features[!(features %in% c("tot_prim_defects", "defect_report", "vin"))]
+    features <- colnames(input_data)
+	features <- features[!(features %in% c("tot_tc_defects", "defect_report", "vin", "manuf_date"))]
 	sampled_features <- features[sample(length(features), F)]
 	formula_str <- paste("defect_report ~ ", paste(sampled_features, collapse = " + "), sep = "")
-    #dtree <- rpart(as.formula(formula_str), data = primer_defects_per_car)
-	dtree <- ctree(as.formula(formula_str), data = primer_defects_per_car, controls = ctree_control(maxdepth = 2))
-	#if (!is.null(dtree$splits))
-	#{
-	  #No point in printing decision trees with root node only
-	  cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
-	  print(dtree)
-	  #print_dtree(dtree)
-	#}
+	
+	#input_data has 18% from Unacceptable class for threshold = 0
+	#Creating decision stumps only as this will give insights easy to interpret
+	dtree <- ctree(as.formula(formula_str), data = input_data, controls = ctree_control(maxdepth = 1))
+	cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
+	print(dtree)  
   }
-  sink()
-  dtree
+  #sink()
+  closeAllConnections()
+  opfile
 }
 
-bar_plots_for_AP_variables <- function(feature, cutpoint)
+get_pdpc <- function(input_data, feature, cutpoint)
 {
-  #tree_node defines which group, based on a cutpoint on a feature, a data point belongs to, e.g., TH_AH_4_Temp <= 73.5 or TH_AH_4_Temp > 73.5
-  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
-  primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
-  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)  
-  primer_defects_per_car$tree_node <- ifelse((primer_defects_per_car[, feature] <= cutpoint), paste(" <= ", cutpoint, sep = ""),
+  input_data$tree_node <- ifelse((input_data[, feature] <= cutpoint), paste(" <= ", cutpoint, sep = ""),
                                              paste(" > ", cutpoint, sep = ""))
-  #primer_defects_per_car$tree_node <- gsub("TH_AH_", "AH", primer_defects_per_car$tree_node)
-  pdpc_trans <- primer_defects_per_car %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = count/sum(count))
+  pdpc_trans <- input_data %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = count/sum(count))
+}
+
+bar_plots_for_AP_variables <- function(data_mode, input_data, feature, cutpoint)
+{
+  #tree_node defines which group, based on a cutpoint on a feature, a data point belongs to, e.g., TH_AH_4_Temp <= 73.5 or TH_AH_4_Temp > 73.5  
+  pdpc_trans <- get_pdpc(input_data, feature, cutpoint)
+  print(feature)
   print(pdpc_trans)
-  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\",
-                      feature, "_", cutpoint, ".png", sep = "")
+  image_file <- 
+    paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\primer\\",
+          feature, "_", cutpoint, "_", data_mode, ".png", sep = "")
   png(image_file, width = 600, height = 480, units = "px")
   cbbPalette <- c("#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
   p <- ggplot(pdpc_trans, aes(x = factor(tree_node), y = perc*100, fill = defect_report)) +
@@ -159,16 +143,26 @@ bar_plots_for_AP_variables <- function(feature, cutpoint)
   p
 }
 
-barplot_grid_view_from_tree_output <- function(df_features_cutpoints, how_many = 4)
+barplot_grid_view_from_tree_output <- function(data_mode, input_data, df_features_cutpoints, how_many = 4)
 {
-  gp1 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
-  gp2 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
-  gp3 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
-  gp4 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
+  gp1 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
+  gp2 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
+  gp3 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
+  gp4 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
   
   frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
                              #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
                             )
+  grob <- grid.grab()
+  
+  image_file <- 
+  paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\primer\\barplot_grid_view_",
+        data_mode, ".png", sep = "")
+  png(image_file, width = 700, height = 700)
+  grid.newpage()
+  grid.draw(grob)
+  dev.off()
+  frame_grob
 }
 
 #Convert the outliers of each column (outlier is any point that is less than the 25% quartile minus 1.5 times the IQR 
@@ -178,13 +172,9 @@ outlier <- function(x) {
  x
 }
 
-box_plots_for_AP_variables <- function(feature)
-{
-  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
-  primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
-  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
-  
-  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\box_plots_ap_vars\\",
+box_plots_for_AP_variables <- function(primer_defects_per_car, feature)
+{  
+  image_file <- paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\box_plots_ap_vars\\primer\\",
                       feature, ".png", sep = "")
   png(image_file, width = 600, height = 480, units = "px")
   
@@ -205,19 +195,19 @@ box_plots_for_AP_variables <- function(feature)
   p
 }
 
-boxplot_grid_view_from_tree_output <- function(df_features_cutpoints, how_many = 4)
+boxplot_grid_view_from_tree_output <- function(primer_defects_per_car, df_features_cutpoints, how_many = 4)
 {
-  gp1 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(df_features_cutpoints[1, "feature"])))
-  gp2 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(df_features_cutpoints[2, "feature"])))
-  gp3 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(df_features_cutpoints[3, "feature"])))
-  gp4 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(df_features_cutpoints[4, "feature"])))
+  gp1 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(primer_defects_per_car, df_features_cutpoints[1, "feature"])))
+  gp2 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(primer_defects_per_car, df_features_cutpoints[2, "feature"])))
+  gp3 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(primer_defects_per_car, df_features_cutpoints[3, "feature"])))
+  gp4 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(primer_defects_per_car, df_features_cutpoints[4, "feature"])))
   
   frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
                              #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
                             )
   grob <- grid.grab()
 
-  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\box_plots_ap_vars\\boxplot_grid_view.png"
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\box_plots_ap_vars\\primer\\boxplot_grid_view.png"
   png(image_file, width = 700, height = 700)
   grid.newpage()
   grid.draw(grob)
@@ -226,10 +216,9 @@ boxplot_grid_view_from_tree_output <- function(df_features_cutpoints, how_many =
   frame_grob
 }
 
-generate_plots_from_dtree_output <- function(
-    filename = "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\Tree_outputs\\Tree_output_2017_02_13_15_40_36.txt")
+parse_tree_output <- function(model_file)
 {
-  lines <- readLines(filename) 
+  lines <- readLines(model_file) 
   n_lines <- length(lines)
   df_features_cutpoints <- data.frame(feature = character(), cutpoint = numeric(), statistic = numeric(0), stringsAsFactors = FALSE)
                       
@@ -251,54 +240,167 @@ generate_plots_from_dtree_output <- function(
   }
   df_features_cutpoints <- unique(df_features_cutpoints)
   df_features_cutpoints <- df_features_cutpoints[order(-df_features_cutpoints$statistic),] 
-  print(df_features_cutpoints)
+  df_features_cutpoints
+} 
   
-  #apply(df_features_cutpoints, 1, function(row)bar_plots_for_AP_variables(as.character(row["feature"]), as.numeric(row["cutpoint"])))
-  #apply(df_features_cutpoints, 1, function(row)box_plots_for_AP_variables(as.character(row["feature"])))
-  frame_grob <- barplot_grid_view_from_tree_output(df_features_cutpoints)
-  #frame_grob <- boxplot_grid_view_from_tree_output(df_features_cutpoints)
+generate_plots_from_dtree_output <- function(history_win_in_months = 2, window_end = "2016-12-22", threshold = 0)
+{
+  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
+  primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  primer_defects_per_car$defect_report <- ifelse((primer_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
+  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
+  primer_defects_per_car$manuf_date <- as.character(primer_defects_per_car$manuf_date)
+  
+  start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", history_win_in_months, " months", sep = ""))[2])
+  historical_data <- subset(primer_defects_per_car, ((manuf_date >= start_date) & (manuf_date <= window_end)))
+
+  model_file <- el_yunque(historical_data, F = 5, T = 50)
+  df_features_cutpoints <- parse_tree_output(model_file)
+  
+  frame_grob <- barplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints)
+    
+  #Validate the tree models on last one month's data using the bar plot for now
+  recent_data <- subset(primer_defects_per_car, ((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))
+  frame_grob <- barplot_grid_view_from_tree_output(data_mode = "recent", recent_data, df_features_cutpoints)
 }
 
-rank_sum_tests <- function(threshold = 0)
+
+find_daily_volumes <- function()
 {
-  filename <- paste(filepath_prefix, "primer_defects_per_car_new.csv", sep = "")
+  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
+  primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F)
+  primer_defects_per_car$defect_report <- ifelse((primer_defects_per_car$tot_tc_defects <= 0), "Acceptable", "Unacceptable")
+  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
+  primer_defects_per_car$manuf_date <- as.character(primer_defects_per_car$manuf_date)
+  historical_data <- subset(primer_defects_per_car, !((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))
+  volumes_per_day <- historical_data %>% select(manuf_date, vin) %>% group_by(manuf_date) %>% summarise(volume = length(vin))
+  volumes_per_day <- volumes_per_day[order(volumes_per_day$manuf_date),]
+  filename <- paste(filepath_prefix, "daily_volumes.csv", sep = "")
+  write.table(volumes_per_day, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
+}
+
+get_pdpc_historical_or_recent <- function(input_data, data_mode, how_many_from_pdpc, df_features_cutpoints)
+{
+  pdpc <- data.frame(feature = character(), tree_node = character(), defect_report = character(), 
+                     count = numeric(0), perc = numeric(0), stringsAsFactors = FALSE)
+  for (i in 1:how_many_from_pdpc)
+  {
+    pdpc_this_row <- as.data.frame(get_pdpc(input_data, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"]))
+	pdpc_this_row$feature <- df_features_cutpoints[i, "feature"]
+	pdpc <- rbind(pdpc, pdpc_this_row)
+  }
+  pdpc$data_mode <- data_mode
+  pdpc
+}
+
+#Generate a score for a given window size.
+score_window_size <- function(historical_data, recent_data, df_features_cutpoints, how_many_from_pdpc = 4)
+{
+  #Apply df_features_cutpoints on historical data to get the percentage of acceptable and unacceptable cars 
+  #in the children of root nodes of the trees (we call it pdpc). Get the pdpc for historical window first.   
+  pdpc_historical <- get_pdpc_historical_or_recent(historical_data, "historical", how_many_from_pdpc, df_features_cutpoints)  
+  #Now, get the pdpc for the recent window.
+  pdpc_recent <- get_pdpc_historical_or_recent(recent_data, "recent", how_many_from_pdpc, df_features_cutpoints)
+    
+  pdpc_all <- merge(x = pdpc_historical, y = pdpc_recent, by = c("feature", "tree_node", "defect_report"), all = TRUE)
+  pdpc_all$perc.y[is.na(pdpc_all$perc.y)] <- 0
+  pdpc_all$perc.x[is.na(pdpc_all$perc.x)] <- 0
+  print(pdpc_all)
+  manhattan_distance <- sum(abs(pdpc_all$perc.x - pdpc_all$perc.y))
+}
+
+#Compute utility score for a model, by checking how much the fraction of unacceptable cars changes when the 
+#attributes cross cut-points identified by the decision trees.
+compute_utility_score <- function(input_data, data_mode, df_features_cutpoints, how_many_from_pdpc = 4)
+{
+  pdpc <- get_pdpc_historical_or_recent(input_data, data_mode, how_many_from_pdpc, df_features_cutpoints)  
+  unacc <- subset(pdpc, (defect_report == "Unacceptable"))
+  unacc$which_side <- ifelse((substr(unacc$tree_node, 1, 2) == ' >'), "greater_than", "less_than")
+  unacc <- unacc[, c("feature", "which_side", "perc")]
+  unacc_wide <- dcast(unacc, feature ~ which_side, value.var = "perc")
+  utility <- sum(abs(unacc_wide$greater_than - unacc_wide$less_than))
+}
+
+plot_win_len_and_score <- function()
+{
+  filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
+  win_len_and_score <- read.csv(filename, header = T, stringsAsFactors = F) 
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\primer\\win_len_and_score.png"
+  png(image_file, width = 1200, height = 400)
+  p <- ggplot(win_len_and_score, aes(x = win_len, y = score)) + geom_line() + geom_point() + 
+       scale_x_continuous(breaks = win_len_and_score$win_len, labels = as.character(win_len_and_score$win_len)) + 
+	   theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
+	         axis.text.y = element_text(size = 12, color = 'black', face = 'bold')) + 
+       xlab("Window length for historical training data (in months)") + ylab("Manhattan distance between historical and recent data")
+  print(p)
+  aux <- dev.off()
+}
+
+#Take last one week for validation, and n number of weeks before that for training. Make sure to drop the
+#shutdown period from training data. Last date for training data is given by window_end, which is 2017-02-01.
+find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown = "2016-12-23", last_day_of_shutdown = "2017-01-02", 
+                                                           window_end = "2017-02-01", threshold = 0)
+{
+  filename <- paste(filepath_prefix, "primer_defects_per_car.csv", sep = "")
   primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
   primer_defects_per_car$defect_report <- ifelse((primer_defects_per_car$tot_prim_defects <= threshold), "Acceptable", "Unacceptable")
-  features <- colnames(primer_defects_per_car)
-  features <- features[!(features %in% c("tot_prim_defects", "defect_report", "vin"))]
-  n_features <- length(features)
-  for (i in 1:n_features)
+  print(table(primer_defects_per_car$defect_report))
+  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
+  primer_defects_per_car$manuf_date <- as.character(primer_defects_per_car$manuf_date)
+  #There were no primer defects after shutdown!!
+  recent_data <- subset(primer_defects_per_car, ((manuf_date >= "2017-02-02") & (manuf_date <= "2017-02-08")))  #Does not depend on window size
+  win_len_and_score <- data.frame(win_len = 4:12, generalization_score = rep(0,9), utility_score_on_historical = rep(0,9), 
+                                  utility_score_on_recent = rep(0,9), stringsAsFactors = FALSE)
+  
+  for (i in 1:9)
   {
-    formula_str <- paste(features[i], " ~ defect_report", sep = "")
-    wt <- wilcox.test(as.formula(formula_str), data = primer_defects_per_car)
-	cat(paste("formula_str = ", formula_str, "\n", sep = ""))
-	print(wt)
+    start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", (7*win_len_and_score[i, "win_len"]-1), " days", sep = ""))[2])
+	#If the start_date computed initially falls on or before the shutdown, check how many days we are losing because of shutdown, and 
+	#adjust those many days from days before shutdown. Shutdown was for 11 days, including both ends.
+	revised_start_date <- start_date
+	if (start_date <= last_day_of_shutdown)
+	{
+	  lost_days <- as.numeric(difftime(as.Date(last_day_of_shutdown, '%Y-%m-%d'), as.Date(start_date, '%Y-%m-%d'), units = c("days"))) + 1
+	  last_day_before_shutdown <- as.character(seq(as.Date(first_day_of_shutdown), length = 2, by = "-1 days")[2])
+      revised_start_date <-  as.character(seq(as.Date(last_day_before_shutdown), length = 2, by = paste("-", (lost_days - 1), " days", sep = ""))[2])
+	}
+    cat(paste("i = ", i, ", win_len_and_score[i, win_len] = ", win_len_and_score[i, "win_len"], 
+	          ", start_date = ", start_date, ", revised_start_date = ", revised_start_date, "\n", sep = ""))  
+    historical_data <- subset(primer_defects_per_car, ((manuf_date >= revised_start_date) & (manuf_date <= window_end))) 
+	#Eliminate data corresponding to shutdown period (2016-12-23 to 2017-01-02)
+	historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
+	cat(paste("nrow(historical_data) = ", nrow(historical_data), "\n", sep = ""))
+	print(table(historical_data$defect_report))
+	print(table(recent_data$defect_report))
+	
+    #Build tree model on historical data
+    model_file <- el_yunque(historical_data)
+    #Get the variables used for splitting the root nodes, their cut-points and statistic values
+    df_features_cutpoints <- parse_tree_output(model_file)
+	cat(paste("length(unique(df_features_cutpoints$feature)) = ", length(unique(df_features_cutpoints$feature)), "\n", sep = ""))
+	hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #Not getting even 4 features when threshold = 2
+	
+	win_len_and_score[i, "generalization_score"] <- score_window_size(historical_data, recent_data, df_features_cutpoints, how_many_from_pdpc = hmfp)
+	win_len_and_score[i, "utility_score_on_historical"] <- compute_utility_score(historical_data, "historical", df_features_cutpoints, 
+	                                                                             how_many_from_pdpc = hmfp)
+	win_len_and_score[i, "utility_score_on_recent"] <- compute_utility_score(recent_data, "recent", df_features_cutpoints, how_many_from_pdpc = hmfp)
   }
+  print(win_len_and_score)
+  filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
+  write.table(win_len_and_score, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
+  win_len_and_score
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_per_car_on_cluster.R")
 #median_CV_by_var <- primer_analysis_per_car_process_variable()
 #primer_defects_per_car <- create_per_vehicle_averages()
 #dtree <- el_yunque(threshold = 0)
-#Based on Tree_output_2017_02_09_11_54_24.txt
-#bar_plots_for_AP_variables("TH_AH_4_Temp", 73.5)
-#bar_plots_for_AP_variables("TH_AH_2_Temp", 73.7)
-#bar_plots_for_AP_variables("TH_AH_3_Temp", 72.1)
-#bar_plots_for_AP_variables("TH_AH_2_Hum", 70.0729)
-#bar_plots_for_AP_variables("TH_AH_5_Temp", 71.9)
-#bar_plots_for_AP_variables("TH_AH_5_Hum", 67.8787)
-#bar_plots_for_AP_variables("TH_AH_3_Hum", 69.1204)
-#bar_plots_for_AP_variables("TH_AH_1_Hum", 69.8113)
-#bar_plots_for_AP_variables("TH_AH_1_Temp", 72.4)
-
-#box_plots_for_AP_variables("TH_AH_4_Temp")
-#box_plots_for_AP_variables("TH_AH_2_Temp")
-#box_plots_for_AP_variables("TH_AH_3_Temp")
-#box_plots_for_AP_variables("TH_AH_2_Hum")
-#box_plots_for_AP_variables("TH_AH_5_Temp")
-#box_plots_for_AP_variables("TH_AH_5_Hum")
-#box_plots_for_AP_variables("TH_AH_3_Hum")
-#box_plots_for_AP_variables("TH_AH_1_Hum")
-#box_plots_for_AP_variables("TH_AH_1_Temp")
+#Note the filename before running generate_plots_from_dtree_output()
 #frame_grob <- generate_plots_from_dtree_output()
-rank_sum_tests(threshold = 0)
+#At threshold = 2, the decision tree algorithm does not generate any real tree at all since 
+#only 4% of the vehicles have more than 2 defects
+#win_len_and_score <- find_optimal_window_for_training_model_by_month(threshold = 2)
+#plot_win_len_and_score()
+#utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
+#check_weekly_windows(threshold = 0)
+win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 0)
