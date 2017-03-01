@@ -99,13 +99,14 @@ el_yunque <- function(input_data, F = 5, T = 50)
   for (i in 1:T)
   {
     features <- colnames(input_data)
-	features <- features[!(features %in% c("tot_tc_defects", "defect_report", "vin", "manuf_date"))]
+	features <- features[!(features %in% c("tot_prim_defects", "defect_report", "vin", "manuf_date"))]
+	cat(paste("length(features) = ", length(features), "\n", sep = ""))
 	sampled_features <- features[sample(length(features), F)]
 	formula_str <- paste("defect_report ~ ", paste(sampled_features, collapse = " + "), sep = "")
 	
 	#input_data has 18% from Unacceptable class for threshold = 0
 	#Creating decision stumps only as this will give insights easy to interpret
-	dtree <- ctree(as.formula(formula_str), data = input_data, controls = ctree_control(maxdepth = 1))
+	dtree <- ctree(as.formula(formula_str), data = input_data, controls = ctree_control(maxdepth = 1, savesplitstats = TRUE))
 	cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
 	print(dtree)  
   }
@@ -318,6 +319,8 @@ compute_utility_score <- function(input_data, data_mode, df_features_cutpoints, 
   unacc$which_side <- ifelse((substr(unacc$tree_node, 1, 2) == ' >'), "greater_than", "less_than")
   unacc <- unacc[, c("feature", "which_side", "perc")]
   unacc_wide <- dcast(unacc, feature ~ which_side, value.var = "perc")
+  unacc_wide$greater_than[is.na(unacc_wide$greater_than)] <- 0
+  unacc_wide$less_than[is.na(unacc_wide$less_than)] <- 0
   utility <- sum(abs(unacc_wide$greater_than - unacc_wide$less_than))
 }
 
@@ -391,7 +394,46 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
   win_len_and_score
 }
 
-#source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_pf_defects_per_car_on_cluster.R")
+#Update on 2017-02-24: Until the issue about post-shutdown data is resolved, we take the last one week before shutdown as 
+#the recent window and the weeks before that as historical window. 
+find_optimal_window_for_training_model_by_week_interim <- function(window_end = "2016-12-15", threshold = 0)
+{
+  filename <- paste(filepath_prefix, "primer_defects_per_car.csv", sep = "")
+  primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  primer_defects_per_car$defect_report <- ifelse((primer_defects_per_car$tot_prim_defects <= threshold), "Acceptable", "Unacceptable")
+  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
+  primer_defects_per_car$manuf_date <- as.character(primer_defects_per_car$manuf_date)
+  #There were no primer defects after shutdown!!
+  recent_data <- subset(primer_defects_per_car, ((manuf_date >= "2016-12-16") & (manuf_date <= "2016-12-22")))  #Does not depend on window size
+  win_len_and_score <- data.frame(win_len = 8:16, generalization_score = rep(0,9), utility_score_on_historical = rep(0,9), 
+                                  utility_score_on_recent = rep(0,9), stringsAsFactors = FALSE)
+  
+  for (i in 1:9)
+  {
+    start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", (7*win_len_and_score[i, "win_len"]-1), " days", sep = ""))[2])
+	cat(paste("i = ", i, ", win_len_and_score[i, win_len] = ", win_len_and_score[i, "win_len"], 
+	          ", start_date = ", start_date, "\n", sep = ""))  
+    historical_data <- subset(primer_defects_per_car, ((manuf_date >= start_date) & (manuf_date <= window_end))) 
+	
+	#Build tree model on historical data
+    model_file <- el_yunque(historical_data)
+    #Get the variables used for splitting the root nodes, their cut-points and statistic values
+    df_features_cutpoints <- parse_tree_output(model_file)
+	hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #Not getting even 4 features when threshold = 2
+	
+	win_len_and_score[i, "generalization_score"] <- score_window_size(historical_data, recent_data, df_features_cutpoints, how_many_from_pdpc = hmfp)
+	win_len_and_score[i, "utility_score_on_historical"] <- compute_utility_score(historical_data, "historical", df_features_cutpoints, 
+	                                                                             how_many_from_pdpc = hmfp)
+	win_len_and_score[i, "utility_score_on_recent"] <- compute_utility_score(recent_data, "recent", df_features_cutpoints, how_many_from_pdpc = hmfp)
+  }
+  print(win_len_and_score)
+  filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
+  write.table(win_len_and_score, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
+  win_len_and_score
+}
+
+
+#source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code_local\\ics_fatal_pf_defects_per_car_on_cluster.R")
 #median_CV_by_var <- primer_analysis_per_car_process_variable()
 #primer_defects_per_car <- create_per_vehicle_averages()
 #dtree <- el_yunque(threshold = 0)
@@ -403,4 +445,4 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
 #plot_win_len_and_score()
 #utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
 #check_weekly_windows(threshold = 0)
-win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 0)
+win_len_and_score <- find_optimal_window_for_training_model_by_week_interim(threshold = 0)
