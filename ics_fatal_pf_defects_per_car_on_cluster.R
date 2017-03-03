@@ -132,7 +132,8 @@ get_pdpc <- function(input_data, feature, cutpoint)
 {
   input_data$tree_node <- ifelse((input_data[, feature] <= cutpoint), paste(" <= ", cutpoint, sep = ""),
                                  paste(" > ", cutpoint, sep = ""))
-  pdpc_trans <- input_data %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = count/sum(count))
+  pdpc_trans <- input_data %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = round(100*count/sum(count), 2)) %>% ungroup() %>% group_by(tree_node) %>% mutate(csum = cumsum(perc)) %>% mutate(pos = csum - 0.5*perc)
+  pdpc_trans
 }
 
 bar_plots_for_AP_variables <- function(data_mode, input_data, feature, cutpoint)
@@ -146,8 +147,13 @@ bar_plots_for_AP_variables <- function(data_mode, input_data, feature, cutpoint)
           feature, "_", cutpoint, "_", data_mode, ".png", sep = "")
   png(image_file, width = 600, height = 480, units = "px")
   cbbPalette <- c("#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
-  p <- ggplot(pdpc_trans, aes(x = factor(tree_node), y = perc*100, fill = defect_report)) +
-    geom_bar(stat = "identity", width = 0.7) + scale_fill_manual(values = cbbPalette) + 
+  p <- ggplot(pdpc_trans, aes(x = factor(tree_node), y = perc, fill = defect_report)) +
+    geom_bar(stat = "identity", width = 0.7) + 
+	#In ggplot_2.2.0, fill order is based on the order of the factor levels. 
+	#The default order will plot the first level at the top of the stack instead of the bottom. 
+	#If you want the first level at the bottom of the stack, use position_stack(reverse = TRUE).
+	geom_col(position = position_stack(reverse = TRUE)) + 
+	geom_text(aes(label = perc, y = pos), size = 4, colour = "red", fontface = "bold") + scale_fill_manual(values = cbbPalette) + 
     labs(x = "tree_node", y = "percent", fill = "defect_report") + ggtitle(feature) + 
     theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
           axis.text.y = element_text(size = 12, color = 'black', face = 'bold'),
@@ -257,40 +263,39 @@ parse_tree_output <- function(model_file)
   df_features_cutpoints
 } 
 
-generate_plots_from_dtree_output <- function(history_win_in_months = 2, window_end = "2016-12-22", threshold = 0)
+generate_plots_from_dtree_output <- function(first_day_of_shutdown = "2016-12-23", last_day_of_shutdown = "2017-01-02", 
+                                             history_win_in_weeks = 5, window_end = "2017-02-01", threshold = 0)
 {
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
   primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
-  primer_defects_per_car$defect_report <- ifelse((primer_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
+  primer_defects_per_car$defect_report <- ifelse((primer_defects_per_car$tot_prim_defects <= threshold), "Acceptable", "Unacceptable")
   primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
   primer_defects_per_car$manuf_date <- as.character(primer_defects_per_car$manuf_date)
   
-  start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", history_win_in_months, " months", sep = ""))[2])
-  historical_data <- subset(primer_defects_per_car, ((manuf_date >= start_date) & (manuf_date <= window_end)))
+  start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", (7*history_win_in_weeks-1), " days", sep = ""))[2])
+  #If the start_date computed initially falls on or before the shutdown, check how many days we are losing because of shutdown, and 
+  #adjust those many days from days before shutdown. Shutdown was for 11 days, including both ends.
+  revised_start_date <- start_date
+  if (start_date <= last_day_of_shutdown)
+  {
+    lost_days <- as.numeric(difftime(as.Date(last_day_of_shutdown, '%Y-%m-%d'), as.Date(start_date, '%Y-%m-%d'), units = c("days"))) + 1
+    last_day_before_shutdown <- as.character(seq(as.Date(first_day_of_shutdown), length = 2, by = "-1 days")[2])
+    revised_start_date <-  as.character(seq(as.Date(last_day_before_shutdown), length = 2, by = paste("-", (lost_days - 1), " days", sep = ""))[2])
+  }
+  cat(paste("start_date = ", start_date, ", revised_start_date = ", revised_start_date, "\n", sep = ""))  
+  historical_data <- subset(primer_defects_per_car, ((manuf_date >= revised_start_date) & (manuf_date <= window_end))) 
+  #Eliminate data corresponding to shutdown period (2016-12-23 to 2017-01-02)
+  historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
   
   model_file <- el_yunque(historical_data, F = 5, T = 50)
   df_features_cutpoints <- parse_tree_output(model_file)
   
+  #Writing to file is taken care of within barplot_grid_view_from_tree_output()
   frame_grob <- barplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints)
   
-  #Validate the tree models on last one month's data using the bar plot for now
-  recent_data <- subset(primer_defects_per_car, ((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))
+  #Validate the tree models on last one week's data using the bar plot for now
+  recent_data <- subset(primer_defects_per_car, ((manuf_date >= "2017-02-02") & (manuf_date <= "2017-02-08")))  #Does not depend on window size
   frame_grob <- barplot_grid_view_from_tree_output(data_mode = "recent", recent_data, df_features_cutpoints)
-}
-
-
-find_daily_volumes <- function()
-{
-  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\primer_defects_per_car.csv"
-  primer_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F)
-  primer_defects_per_car$defect_report <- ifelse((primer_defects_per_car$tot_tc_defects <= 0), "Acceptable", "Unacceptable")
-  primer_defects_per_car$defect_report <- as.factor(primer_defects_per_car$defect_report)
-  primer_defects_per_car$manuf_date <- as.character(primer_defects_per_car$manuf_date)
-  historical_data <- subset(primer_defects_per_car, !((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))
-  volumes_per_day <- historical_data %>% select(manuf_date, vin) %>% group_by(manuf_date) %>% summarise(volume = length(vin))
-  volumes_per_day <- volumes_per_day[order(volumes_per_day$manuf_date),]
-  filename <- paste(filepath_prefix, "daily_volumes.csv", sep = "")
-  write.table(volumes_per_day, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
 }
 
 get_pdpc_historical_or_recent <- function(input_data, data_mode, how_many_from_pdpc, df_features_cutpoints)
@@ -321,6 +326,8 @@ score_window_size <- function(historical_data, recent_data, df_features_cutpoint
   pdpc_all$perc.x[is.na(pdpc_all$perc.x)] <- 0
   print(pdpc_all)
   manhattan_distance <- sum(abs(pdpc_all$perc.x - pdpc_all$perc.y))
+  drift <- mean(abs(pdpc_all$perc.x - pdpc_all$perc.y)/pdpc_all$perc.x)
+  ret_val <- list("manhattan_distance" = manhattan_distance, "drift" = drift)
 }
 
 #Compute utility score for a model, by checking how much the fraction of unacceptable cars changes when the 
@@ -334,7 +341,8 @@ compute_utility_score <- function(input_data, data_mode, df_features_cutpoints, 
   unacc_wide <- dcast(unacc, feature ~ which_side, value.var = "perc")
   unacc_wide$greater_than[is.na(unacc_wide$greater_than)] <- 0
   unacc_wide$less_than[is.na(unacc_wide$less_than)] <- 0
-  utility <- sum(abs(unacc_wide$greater_than - unacc_wide$less_than))
+  #utility <- sum(abs(unacc_wide$greater_than - unacc_wide$less_than))
+  utility <- mean(abs(unacc_wide$greater_than - unacc_wide$less_than)/unacc_wide$less_than)
 }
 
 plot_win_len_and_score <- function()
@@ -391,11 +399,14 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
     df_features_cutpoints <- parse_tree_output(model_file)
     hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #Not getting even 4 features when threshold = 2
     
-    win_len_and_score[i, "generalization_score"] <- score_window_size(historical_data, recent_data, df_features_cutpoints, how_many_from_pdpc = hmfp)
+	scores <- score_window_size(historical_data, recent_data, df_features_cutpoints, how_many_from_pdpc = hmfp) 
+	#win_len_and_score[i, "generalization_score"] <- scores[["manhattan_distance"]]
+	win_len_and_score[i, "drift"] <- scores[["drift"]]
     win_len_and_score[i, "utility_score_on_historical"] <- compute_utility_score(historical_data, "historical", df_features_cutpoints, 
                                                                                  how_many_from_pdpc = hmfp)
     win_len_and_score[i, "utility_score_on_recent"] <- compute_utility_score(recent_data, "recent", df_features_cutpoints, how_many_from_pdpc = hmfp)
   }
+  win_len_and_score$final_score <- win_len_and_score$utility_score_on_recent/win_len_and_score$generalization_score
   print(win_len_and_score)
   filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
   write.table(win_len_and_score, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
@@ -434,6 +445,7 @@ find_optimal_window_for_training_model_by_week_interim <- function(window_end = 
                                                                                  how_many_from_pdpc = hmfp)
     win_len_and_score[i, "utility_score_on_recent"] <- compute_utility_score(recent_data, "recent", df_features_cutpoints, how_many_from_pdpc = hmfp)
   }
+  win_len_and_score$final_score <- win_len_and_score$utility_score_on_recent/win_len_and_score$generalization_score
   print(win_len_and_score)
   filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
   write.table(win_len_and_score, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
@@ -446,11 +458,11 @@ find_optimal_window_for_training_model_by_week_interim <- function(window_end = 
 #primer_defects_per_car <- create_per_vehicle_averages()
 #dtree <- el_yunque(threshold = 0)
 #Note the filename before running generate_plots_from_dtree_output()
-#frame_grob <- generate_plots_from_dtree_output()
+frame_grob <- generate_plots_from_dtree_output()
 #At threshold = 2, the decision tree algorithm does not generate any real tree at all since 
 #only 4% of the vehicles have more than 2 defects
 #win_len_and_score <- find_optimal_window_for_training_model_by_month(threshold = 2)
 #plot_win_len_and_score()
 #utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
 #check_weekly_windows(threshold = 0)
-win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 0)
+#win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 0)
