@@ -100,36 +100,45 @@ boxplot_grid_view_from_tree_output <- function(defects_per_car, df_features_cutp
   frame_grob
 }
 
-generate_plots_from_dtree_output <- function(defects_per_car, filename, view)
+parse_tree_output <- function(model_file)
 {
-  lines <- readLines(filename) 
+  lines <- readLines(model_file) 
   n_lines <- length(lines)
   df_features_cutpoints <- data.frame(feature = character(), cutpoint = numeric(), statistic = numeric(0), stringsAsFactors = FALSE)
-                      
+  
   row_number <- 1
   for (i in 1:n_lines)
   {
     line <- lines[i]
-	if ((substr(line, 1, 3) == "1) ") && (grepl("criterion", line)))
-	{
-	  tokens <- unlist(strsplit(substr(line, 4, nchar(line)), ";"))
-	  feature_cutpoint <- unlist(strsplit(tokens[1], "<="))
-	  df_features_cutpoints[row_number, "feature"] <- substr(feature_cutpoint[1], 1, nchar(feature_cutpoint[1]) - 1)
-	  df_features_cutpoints[row_number, "cutpoint"] <- substr(feature_cutpoint[2], 2, nchar(feature_cutpoint[2]))
-	  crit_stat <- unlist(strsplit(tokens[2], ","))
-	  stat_val <- unlist(strsplit(crit_stat[2], "="))
-	  df_features_cutpoints[row_number, "statistic"] <- as.numeric(substr(stat_val[2], 2, nchar(stat_val[2])))
-	  row_number <- row_number + 1
-	}
+    if ((substr(line, 1, 3) == "1) ") && (grepl("criterion", line)))
+    {
+      tokens <- unlist(strsplit(substr(line, 4, nchar(line)), ";"))
+      feature_cutpoint <- unlist(strsplit(tokens[1], "<="))
+      df_features_cutpoints[row_number, "feature"] <- substr(feature_cutpoint[1], 1, nchar(feature_cutpoint[1]) - 1)
+      df_features_cutpoints[row_number, "cutpoint"] <- substr(feature_cutpoint[2], 2, nchar(feature_cutpoint[2]))
+      crit_stat <- unlist(strsplit(tokens[2], ","))
+      stat_val <- unlist(strsplit(crit_stat[2], "="))
+      df_features_cutpoints[row_number, "statistic"] <- as.numeric(substr(stat_val[2], 2, nchar(stat_val[2])))
+      row_number <- row_number + 1
+    }
   }
   df_features_cutpoints <- unique(df_features_cutpoints)
   df_features_cutpoints <- df_features_cutpoints[order(-df_features_cutpoints$statistic),] 
-  df_features_cutpoints <- df_features_cutpoints[1:4, ] #Keep top 4 on dashboard
+  df_features_cutpoints
+}
+
+generate_plots_from_dtree_output <- function(defects_per_car, model_file, view)
+{
+  df_features_cutpoints <- parse_tree_output(model_file)
+  hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #What if we do not get even 4 features?
+  df_features_cutpoints <- df_features_cutpoints[1:hmfp, ] 
   
   frame_grob <- ifelse((view == "bar_plot"), barplot_grid_view_from_tree_output(defects_per_car, df_features_cutpoints),
                                                boxplot_grid_view_from_tree_output(defects_per_car, df_features_cutpoints))
 }
 
+#Reads input data, splits it into historical and recent, builds model on historical and applies it back on both historical and recent to 
+#generate the plots.
 generate_dtree_and_plot <- function(user_inputs)
 {
   filename <- paste(filepath_prefix, 
