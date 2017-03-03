@@ -1,67 +1,211 @@
 library(shiny)
+library(party)
+library(ggplot2)
+library(gridExtra)
+library(plyr)
+library(dplyr)
 
-rf_from_file <<- NA
-file_path <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code"
-load(paste(file_path, "\\rf.fitN.rda", sep = ""))
-rf_from_file <<- rf.fitN
-most_recent_prediction <<- NA
+filepath_prefix <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\"
+plot_historical <<- NA
+plot_recent <<- NA
 
-custom_fitness <- function(x1, x2, x3, x4, x5, x6, x7, x8, x9, x10)
-{
-  newdata <- data.frame(BP2_1_Robot_Air_Motor = x1, CBTH_Air_House_1_Humidity = x2,
-                        CBTH_Air_House_2_Humidity = x3, CBTH_Air_House_3_Humidity = x4,
-						CBTH_Air_House_5_Humidity = x5, CBTH_Air_House_2_Temp = x6,
-						CBTH_Air_House_5_Temp = x7, CBTH_Air_House_4_Humidity = x8,
-						CP1_4_Robot_Air_Motor = x9, CP2_4_Robot_Air_Motor = x10)
-  #Note: ga() maximizes the fitness function but we want to minimize DPV, hence return negative
-  library(randomForest)
-  raw_prediction <- predict(rf_from_file, newdata)
-  most_recent_prediction <<- raw_prediction
-  -raw_prediction
+el_yunque <- function(defects_per_car, paint_type, F = 5, T = 50)
+{  
+  #Save the output trees in a file named by the timestamp at which it is generated, so that multiple runs do not overwrite results
+  timestr <- as.character(Sys.time())
+  timestr <- gsub("-", "_", timestr)
+  timestr <- gsub(" ", "_", timestr)
+  timestr <- gsub(":", "_", timestr)
+  opfile <- paste(filepath_prefix, "Tree_outputs\\", paint_type, "\\Tree_output_", timestr, ".txt", sep = "")
+  
+  features <- colnames(defects_per_car)
+  non_features <- c("defect_report", "vin", "manuf_date")
+  column <- ifelse((paint_type == "primer"), "tot_prim_defects", "tot_tc_defects")
+  non_features <- c(non_features, column)
+  features <- features[!(features %in% non_features)]
+  
+  sink(file = opfile)
+  for (i in 1:T)
+  {
+    sampled_features <- features[sample(length(features), F)]
+	formula_str <- paste("defect_report ~ ", paste(sampled_features, collapse = " + "), sep = "")
+    #dtree <- rpart(as.formula(formula_str), data = defects_per_car)
+	dtree <- ctree(as.formula(formula_str), data = defects_per_car, controls = ctree_control(maxdepth = 1))
+	#if (!is.null(dtree$splits))
+	#{
+	  #No point in printing decision trees with root node only
+	  cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
+	  print(dtree)
+	  #print_dtree(dtree)
+	#}
+  }
+  #sink()
+  closeAllConnections()
+  opfile
 }
 
-optimize_ap_params <- function(input_ranges)
+bar_plots_for_AP_variables <- function(defects_per_car, feature, cutpoint)
 {
-  library(GA)
-  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\rfImputed.csv"
-  input_data <- read.csv(filename, header = T, stringsAsFactors = F)
-  features <- colnames(input_data)
-  features <- features[(features != "dpv")]
+  #tree_node defines which group, based on a cutpoint on a feature, a data point belongs to, e.g., TH_AH_4_Temp <= 73.5 or TH_AH_4_Temp > 73.5  
+  defects_per_car$tree_node <- ifelse((defects_per_car[, feature] <= cutpoint), paste(" <= ", cutpoint, sep = ""),
+                                             paste(" > ", cutpoint, sep = ""))
+  pdpc_trans <- defects_per_car %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = round(100*count/sum(count), 2)) %>% ungroup() %>% group_by(tree_node) %>% mutate(csum = cumsum(perc)) %>% mutate(pos = csum - 0.5*perc)
+  print(pdpc_trans)
   
-  min_values <- c(input_ranges[["BP2_1_Robot_AM_min"]], input_ranges[["AH1_min_hum"]], input_ranges[["AH2_min_hum"]], 
-                  input_ranges[["AH3_min_hum"]], input_ranges[["AH5_min_hum"]], input_ranges[["AH2_min_temp"]],
-				  input_ranges[["AH5_min_temp"]], input_ranges[["AH4_min_hum"]], input_ranges[["CP1_4_Robot_AM_min"]], 
-				  input_ranges[["CP2_4_Robot_AM_min"]])
-  max_values <- c(input_ranges[["BP2_1_Robot_AM_max"]], input_ranges[["AH1_max_hum"]], input_ranges[["AH2_max_hum"]], 
-                  input_ranges[["AH3_max_hum"]], input_ranges[["AH5_max_hum"]], input_ranges[["AH2_max_temp"]],
-				  input_ranges[["AH5_max_temp"]], input_ranges[["AH4_max_hum"]], input_ranges[["CP1_4_Robot_AM_max"]], 
-				  input_ranges[["CP2_4_Robot_AM_max"]])
+  cbbPalette <- c("#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+  p <- ggplot(pdpc_trans, aes(x = factor(tree_node), y = perc, fill = defect_report)) +
+    geom_bar(stat = "identity", width = 0.7) + 
+	#In ggplot_2.2.0, fill order is based on the order of the factor levels. 
+	#The default order will plot the first level at the top of the stack instead of the bottom. 
+	#If you want the first level at the bottom of the stack, use position_stack(reverse = TRUE).
+	geom_col(position = position_stack(reverse = TRUE)) + 
+	geom_text(aes(label = perc, y = pos), size = 4, colour = "red", fontface = "bold") + scale_fill_manual(values = cbbPalette) + 
+    labs(x = "tree_node", y = "percent", fill = "defect_report") + ggtitle(feature) + 
+    theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
+          axis.text.y = element_text(size = 12, color = 'black', face = 'bold'),
+          plot.title = element_text(lineheight = .8, face = "bold"))
+  p
+}
+
+barplot_grid_view_from_tree_output <- function(defects_per_car, df_features_cutpoints, how_many = 4)
+{
+  gp1 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(defects_per_car, df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
+  gp2 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(defects_per_car, df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
+  gp3 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(defects_per_car, df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
+  gp4 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(defects_per_car, df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
   
-  GA <- ga(type = "real-valued", 
-           fitness = function(x) custom_fitness(x[1], x[2], x[3], x[4], 
-		                                        x[5], x[6], x[7], x[8], 
-												x[9], x[10]), 
-           min = min_values, max = max_values, maxiter = 5,
-           optim = TRUE)
-  paste("Optimal solution is ", paste(paste(features, round(as.numeric(GA@solution), 3), sep = " = "), collapse = ", "), 
-        ", and predicted DPV is ", round(most_recent_prediction, 3), sep = "")
+  frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
+                             #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
+                            )
+}
+
+box_plots_for_AP_variables <- function(defects_per_car, feature)
+{
+  p <- ggplot(defects_per_car, aes(factor(defect_report), get(feature))) + geom_boxplot() + 
+       labs(x = "Defect report", y = feature) + ggtitle(feature) + 
+	   theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
+	         axis.text.y = element_text(size = 12, color = 'black', face = 'bold'),
+			 plot.title = element_text(lineheight = .8, face = "bold"))
+  p
+}
+
+boxplot_grid_view_from_tree_output <- function(defects_per_car, df_features_cutpoints, how_many = 4)
+{
+  gp1 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(defects_per_car, df_features_cutpoints[1, "feature"])))
+  gp2 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(defects_per_car, df_features_cutpoints[2, "feature"])))
+  gp3 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(defects_per_car, df_features_cutpoints[3, "feature"])))
+  gp4 <- ggplot_gtable(ggplot_build(box_plots_for_AP_variables(defects_per_car, df_features_cutpoints[4, "feature"])))
+  
+  frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
+                             #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
+                            )  
+  frame_grob
+}
+
+parse_tree_output <- function(model_file)
+{
+  lines <- readLines(model_file) 
+  n_lines <- length(lines)
+  df_features_cutpoints <- data.frame(feature = character(), cutpoint = numeric(), statistic = numeric(0), stringsAsFactors = FALSE)
+  
+  row_number <- 1
+  for (i in 1:n_lines)
+  {
+    line <- lines[i]
+    if ((substr(line, 1, 3) == "1) ") && (grepl("criterion", line)))
+    {
+      tokens <- unlist(strsplit(substr(line, 4, nchar(line)), ";"))
+      feature_cutpoint <- unlist(strsplit(tokens[1], "<="))
+      df_features_cutpoints[row_number, "feature"] <- substr(feature_cutpoint[1], 1, nchar(feature_cutpoint[1]) - 1)
+      df_features_cutpoints[row_number, "cutpoint"] <- substr(feature_cutpoint[2], 2, nchar(feature_cutpoint[2]))
+      crit_stat <- unlist(strsplit(tokens[2], ","))
+      stat_val <- unlist(strsplit(crit_stat[2], "="))
+      df_features_cutpoints[row_number, "statistic"] <- as.numeric(substr(stat_val[2], 2, nchar(stat_val[2])))
+      row_number <- row_number + 1
+    }
+  }
+  df_features_cutpoints <- unique(df_features_cutpoints)
+  df_features_cutpoints <- df_features_cutpoints[order(-df_features_cutpoints$statistic),] 
+  df_features_cutpoints
+}
+
+generate_plots_from_dtree_output <- function(defects_per_car, model_file, view)
+{
+  df_features_cutpoints <- parse_tree_output(model_file)
+  hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #What if we do not get even 4 features?
+  df_features_cutpoints <- df_features_cutpoints[1:hmfp, ] 
+  
+  frame_grob <- ifelse((view == "bar_plot"), barplot_grid_view_from_tree_output(defects_per_car, df_features_cutpoints),
+                                               boxplot_grid_view_from_tree_output(defects_per_car, df_features_cutpoints))
+}
+
+#Reads input data, splits it into historical and recent, builds model on historical and applies it back on both historical and recent to 
+#generate the plots.
+generate_dtree_and_plot <- function(user_inputs)
+{
+  filename <- paste(filepath_prefix, 
+                    ifelse((user_inputs[["paint_type"]] == "primer"), "primer_defects_per_car.csv", "tc_defects_per_car.csv"),
+					sep = "")
+  defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  column <- ifelse((user_inputs[["paint_type"]] == "primer"), "tot_prim_defects", "tot_tc_defects")
+  defects_per_car$defect_report <- ifelse((defects_per_car[, column] <= user_inputs[["threshold"]]), "Acceptable", "Unacceptable")
+  defects_per_car$defect_report <- as.factor(defects_per_car$defect_report)
+  
+  recent_window_start <- "2017-02-02"
+  recent_window_end <- "2017-02-08"
+  recent_data <- subset(defects_per_car, ((manuf_date >= "2017-02-02") & (manuf_date <= "2017-02-08"))) #Last one week
+  #For now, fix the length of the historical window at 9 weeks
+  win_len <- 9
+  window_end = "2017-02-01"
+  start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", (7*win_len-1), " days", sep = ""))[2])
+  #If the start_date computed initially falls on or before the shutdown, check how many days we are losing because of shutdown, and 
+  #adjust those many days from days before shutdown. Shutdown was for 11 days, including both ends.
+  revised_start_date <- start_date
+  last_day_of_shutdown = "2017-01-02"
+  first_day_of_shutdown = "2016-12-23"
+  if (start_date <= last_day_of_shutdown)
+  {
+	lost_days <- as.numeric(difftime(as.Date(last_day_of_shutdown, '%Y-%m-%d'), as.Date(start_date, '%Y-%m-%d'), units = c("days"))) + 1
+	last_day_before_shutdown <- as.character(seq(as.Date(first_day_of_shutdown), length = 2, by = "-1 days")[2])
+    revised_start_date <-  as.character(seq(as.Date(last_day_before_shutdown), length = 2, by = paste("-", (lost_days - 1), " days", sep = ""))[2])
+  }
+  historical_data <- subset(defects_per_car, ((manuf_date >= revised_start_date) & (manuf_date <= window_end))) 
+  #Eliminate data corresponding to shutdown period (2016-12-23 to 2017-01-02)
+  historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
+  
+  opfile <- el_yunque(historical_data, user_inputs[["paint_type"]], F = 5, T = 50)
+  frame_grob <- generate_plots_from_dtree_output(defects_per_car, opfile, user_inputs[["view"]])
+  plot_historical <<- frame_grob
+  plot_recent <<- frame_grob
 }
 
 shinyServer(function(input, output) {
-
-rangeInput <- reactive({
-    list("AH1_min_hum" = input$AH1_min_hum, "AH1_max_hum" = input$AH1_max_hum, "BP2_1_Robot_AM_min" = input$BP2_1_Robot_AM_min,
-	     "BP2_1_Robot_AM_max" = input$BP2_1_Robot_AM_max, "AH2_min_hum" = input$AH2_min_hum, "AH2_max_hum" = input$AH2_max_hum,
-		 "AH2_min_temp" = input$AH2_min_temp, "AH2_max_temp" = input$AH2_max_temp, "CP1_4_Robot_AM_min" = input$CP1_4_Robot_AM_min,
-		 "CP1_4_Robot_AM_max" = input$CP1_4_Robot_AM_max, "AH3_min_hum" = input$AH3_min_hum, "AH3_max_hum" = input$AH3_max_hum,
-		 "CP2_4_Robot_AM_min" = input$CP2_4_Robot_AM_min, "CP2_4_Robot_AM_max" = input$CP2_4_Robot_AM_max, 
-		 "AH4_min_hum" = input$AH4_min_hum, "AH4_max_hum" = input$AH4_max_hum, "AH5_min_hum" = input$AH5_min_hum,
-		 "AH5_max_hum" = input$AH5_max_hum, "AH5_min_temp" = input$AH5_min_temp, "AH5_max_temp" = input$AH5_max_temp) 
+    userInput <- reactive({
+    list("view" = input$view, "paint_type" = input$paint_type, "threshold" = input$threshold) 
   })
   
-  output$optimal_soln <- renderText({ 
-      input_ranges <- rangeInput()
-      optimize_ap_params(input_ranges)          
-     })
+  pt1 <- reactive({
+    user_inputs <- userInput()
+    generate_dtree_and_plot(user_inputs)  
+	cat("pt1\n")
+    plot_historical	
+  })
+  
+  pt2 <- reactive({
+	cat("pt2\n")
+	#plot_recent #Does not work
+    plot(1:10, 1:10) #Works
+  })
+  #pt2 <- plot_recent
+  #pt2 <- plot(1:10 ,10:1)
+  #cat("pt2\n")
+  
+  #output$plotFromTreeOutput <- renderPlot({ 
+  #    user_inputs <- userInput()
+  #    generate_dtree_and_plot(user_inputs)          
+  #   })
+  output$plotgraph1 <- renderPlot({pt1()})
+  output$plotgraph2 <- renderPlot({pt2()})
+  output$dis <- renderDataTable({})
  }
 )
