@@ -69,9 +69,9 @@ create_per_vehicle_averages <- function()
   
   filename <- paste(filepath_prefix, "tc_defects_per_car.csv", sep = "")
   write.table(tc_defects_per_car, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
-  #Result on new whole data (total 106557 unique vehicles, 15.24% have some top coat defect):
-  #0        1     2     3     4     5     6     7     8     9    10    11     12  13    14    15    16    17    21
-  #90314  7538  4508  2150  1014   439   226   130    90    51    35    26    16   8     5     1     3     2     1
+  #Result on new whole data (total 14325 unique vehicles, starting from 2016-10-17, 36.60% have some top coat defect):
+  #0    1    2    3    4    5    6    7    8    9   10   11   12   13   14   15   16   17 
+  #9081 2609 1421  647  291  119   67   24   20   15    8   10    4    2    2    1    3    1
   tc_defects_per_car
 }
 
@@ -316,6 +316,8 @@ score_window_size <- function(historical_data, recent_data, df_features_cutpoint
   pdpc_all$perc.x[is.na(pdpc_all$perc.x)] <- 0
   print(pdpc_all)
   manhattan_distance <- sum(abs(pdpc_all$perc.x - pdpc_all$perc.y))
+  drift <- mean(abs(pdpc_all$perc.x - pdpc_all$perc.y)/pdpc_all$perc.x)
+  ret_val <- list("manhattan_distance" = manhattan_distance, "drift" = drift)
 }
 
 #Compute utility score for a model, by checking how much the fraction of unacceptable cars changes when the 
@@ -327,7 +329,9 @@ compute_utility_score <- function(input_data, data_mode, df_features_cutpoints, 
   unacc$which_side <- ifelse((substr(unacc$tree_node, 1, 2) == ' >'), "greater_than", "less_than")
   unacc <- unacc[, c("feature", "which_side", "perc")]
   unacc_wide <- dcast(unacc, feature ~ which_side, value.var = "perc")
-  utility <- sum(abs(unacc_wide$greater_than - unacc_wide$less_than))
+  unacc_wide$greater_than[is.na(unacc_wide$greater_than)] <- 0
+  unacc_wide$less_than[is.na(unacc_wide$less_than)] <- 0
+  utility <- mean(abs(unacc_wide$greater_than - unacc_wide$less_than)/unacc_wide$less_than)
 }
 
 #To deal with concept drift, find what window on historical data produces the minimum difference between 
@@ -406,6 +410,7 @@ check_weekly_windows <- function(threshold = 0)
 
 #Take last one week for validation, and n number of weeks before that for training. Make sure to drop the
 #shutdown period from training data. Last date for training data is given by window_end, which is 2017-02-01.
+#Note on March 6 2017: Taking cars starting from 2016-10-17, 14325 unique cars. 
 find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown = "2016-12-23", last_day_of_shutdown = "2017-01-02", 
                                                            window_end = "2017-02-01", threshold = 0)
 {
@@ -415,7 +420,7 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
   tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
   tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
   recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-02-02") & (manuf_date <= "2017-02-08")))  #Does not depend on window size
-  win_len_and_score <- data.frame(win_len = 4:12, generalization_score = rep(0,9), utility_score_on_historical = rep(0,9), 
+  win_len_and_score <- data.frame(win_len = 4:12, drift = rep(0,9), utility_score_on_historical = rep(0,9), 
                                   utility_score_on_recent = rep(0,9), stringsAsFactors = FALSE)
   
   for (i in 1:9)
@@ -442,18 +447,20 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
     df_features_cutpoints <- parse_tree_output(model_file)
 	hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #Not getting even 4 features when threshold = 2
 	
-	win_len_and_score[i, "generalization_score"] <- score_window_size(historical_data, recent_data, df_features_cutpoints, how_many_from_pdpc = hmfp)
+	scores <- score_window_size(historical_data, recent_data, df_features_cutpoints, how_many_from_pdpc = hmfp) 
+	win_len_and_score[i, "drift"] <- scores[["drift"]]
 	win_len_and_score[i, "utility_score_on_historical"] <- compute_utility_score(historical_data, "historical", df_features_cutpoints, 
 	                                                                             how_many_from_pdpc = hmfp)
 	win_len_and_score[i, "utility_score_on_recent"] <- compute_utility_score(recent_data, "recent", df_features_cutpoints, how_many_from_pdpc = hmfp)
   }
+  win_len_and_score$final_score <- win_len_and_score$utility_score_on_recent/win_len_and_score$drift
   print(win_len_and_score)
   filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
   write.table(win_len_and_score, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
   win_len_and_score
 }
 
-#source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code\\ics_fatal_top_coat_defects_per_car.R")
+#source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code_local\\ics_fatal_top_coat_defects_per_car.R")
 #median_CV_by_var <- top_coat_analysis_per_car_process_variable()
 #tc_defects_per_car <- create_per_vehicle_averages()
 #dtree <- el_yunque(threshold = 0)
@@ -465,4 +472,4 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
 #plot_win_len_and_score()
 #utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
 #check_weekly_windows(threshold = 0)
-win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 2)
+win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 0)
