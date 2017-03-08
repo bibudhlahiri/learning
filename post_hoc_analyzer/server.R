@@ -2,7 +2,6 @@ library(shiny)
 library(party)
 library(ggplot2)
 library(gridExtra)
-library(plyr)
 library(dplyr)
 
 filepath_prefix <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\"
@@ -44,12 +43,21 @@ el_yunque <- function(defects_per_car, paint_type, F = 5, T = 50)
   opfile
 }
 
-bar_plots_for_AP_variables <- function(defects_per_car, feature, cutpoint)
+get_pdpc <- function(input_data, feature, cutpoint)
+{
+  input_data$tree_node <- ifelse((input_data[, feature] <= cutpoint), paste(" <= ", cutpoint, sep = ""),
+                                 paste(" > ", cutpoint, sep = ""))
+  pdpc_trans <- input_data %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = round(100*count/sum(count), 2)) %>%
+                ungroup() %>% group_by(tree_node) %>% mutate(csum = cumsum(perc), range_sum = sum(count)) %>% mutate(pos = csum - 0.5*perc) %>%  
+				mutate(caption = paste(perc, " (", count, "/", range_sum, ")", sep = ""))
+  pdpc_trans
+}
+
+bar_plots_for_AP_variables <- function(input_data, feature, cutpoint)
 {
   #tree_node defines which group, based on a cutpoint on a feature, a data point belongs to, e.g., TH_AH_4_Temp <= 73.5 or TH_AH_4_Temp > 73.5  
-  defects_per_car$tree_node <- ifelse((defects_per_car[, feature] <= cutpoint), paste(" <= ", cutpoint, sep = ""),
-                                             paste(" > ", cutpoint, sep = ""))
-  pdpc_trans <- defects_per_car %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = round(100*count/sum(count), 2)) %>% ungroup() %>% group_by(tree_node) %>% mutate(csum = cumsum(perc)) %>% mutate(pos = csum - 0.5*perc)
+  pdpc_trans <- get_pdpc(input_data, feature, cutpoint)
+  print(feature)
   print(pdpc_trans)
   
   cbbPalette <- c("#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
@@ -59,20 +67,20 @@ bar_plots_for_AP_variables <- function(defects_per_car, feature, cutpoint)
 	#The default order will plot the first level at the top of the stack instead of the bottom. 
 	#If you want the first level at the bottom of the stack, use position_stack(reverse = TRUE).
 	geom_col(position = position_stack(reverse = TRUE)) + 
-	geom_text(aes(label = perc, y = pos), size = 4, colour = "red", fontface = "bold") + scale_fill_manual(values = cbbPalette) + 
-    labs(x = "tree_node", y = "percent", fill = "defect_report") + ggtitle(feature) + 
+	geom_text(aes(label = caption, y = pos), size = 4, colour = "red", fontface = "bold") + scale_fill_manual(values = cbbPalette) + 
+    labs(x = paste("Range for ", feature, sep = ""), y = "percent") + ggtitle(feature) + 
     theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
           axis.text.y = element_text(size = 12, color = 'black', face = 'bold'),
           plot.title = element_text(lineheight = .8, face = "bold"))
   p
 }
 
-barplot_grid_view_from_tree_output <- function(defects_per_car, df_features_cutpoints, how_many = 4)
+barplot_grid_view_from_tree_output <- function(input_data, df_features_cutpoints, how_many = 4)
 {
-  gp1 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(defects_per_car, df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
-  gp2 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(defects_per_car, df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
-  gp3 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(defects_per_car, df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
-  gp4 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(defects_per_car, df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
+  gp1 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(input_data, df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
+  gp2 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(input_data, df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
+  gp3 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(input_data, df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
+  gp4 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(input_data, df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
   
   frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
                              #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
@@ -81,8 +89,13 @@ barplot_grid_view_from_tree_output <- function(defects_per_car, df_features_cutp
 
 box_plots_for_AP_variables <- function(defects_per_car, feature)
 {
+  acceptable <- subset(defects_per_car, (defect_report == "Acceptable"))
+  unacceptable <- subset(defects_per_car, (defect_report == "Unacceptable"))
+  title_str <- paste(feature, ", Acc median = ", round(median(acceptable[, feature]),1), 
+                     ", Unacc median = ", round(median(unacceptable[, feature]),1), 
+                     "\n", sep = "")
   p <- ggplot(defects_per_car, aes(factor(defect_report), get(feature))) + geom_boxplot() + 
-       labs(x = "Defect report", y = feature) + ggtitle(feature) + 
+       labs(x = "Defect report", y = feature) + ggtitle(title_str) + 
 	   theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
 	         axis.text.y = element_text(size = 12, color = 'black', face = 'bold'),
 			 plot.title = element_text(lineheight = .8, face = "bold"))
@@ -129,40 +142,40 @@ parse_tree_output <- function(model_file)
   df_features_cutpoints
 }
 
-generate_plots_from_dtree_output <- function(defects_per_car, model_file, view)
+generate_plots_from_dtree_output <- function(input_data, model_file, view)
 {
   df_features_cutpoints <- parse_tree_output(model_file)
   hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #What if we do not get even 4 features?
   df_features_cutpoints <- df_features_cutpoints[1:hmfp, ] 
+  print(df_features_cutpoints)
   
-  frame_grob <- ifelse((view == "bar_plot"), barplot_grid_view_from_tree_output(defects_per_car, df_features_cutpoints),
-                                               boxplot_grid_view_from_tree_output(defects_per_car, df_features_cutpoints))
+  frame_grob <- ifelse((view == "bar_plot"), barplot_grid_view_from_tree_output(input_data, df_features_cutpoints),
+                                               boxplot_grid_view_from_tree_output(input_data, df_features_cutpoints))
 }
 
 #Reads input data, splits it into historical and recent, builds model on historical and applies it back on both historical and recent to 
-#generate the plots.
-generate_dtree_and_plot <- function(user_inputs)
+#generate the plots. For now, fix the length of the historical window at 5 weeks for primer and 7 weeks for top coat.
+generate_dtree_and_plot <- function(user_inputs, window_end = "2017-02-01", first_day_of_shutdown = "2016-12-23", last_day_of_shutdown = "2017-01-02")
 {
   filename <- paste(filepath_prefix, 
                     ifelse((user_inputs[["paint_type"]] == "primer"), "primer_defects_per_car.csv", "tc_defects_per_car.csv"),
 					sep = "")
   defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
   column <- ifelse((user_inputs[["paint_type"]] == "primer"), "tot_prim_defects", "tot_tc_defects")
+  win_len <- ifelse((user_inputs[["paint_type"]] == "primer"), 5, 7)
   defects_per_car$defect_report <- ifelse((defects_per_car[, column] <= user_inputs[["threshold"]]), "Acceptable", "Unacceptable")
   defects_per_car$defect_report <- as.factor(defects_per_car$defect_report)
+  defects_per_car <- subset(defects_per_car, (manuf_date >= "2016-10-17")) #To keep primer data in synch with top coat
   
   recent_window_start <- "2017-02-02"
   recent_window_end <- "2017-02-08"
   recent_data <- subset(defects_per_car, ((manuf_date >= "2017-02-02") & (manuf_date <= "2017-02-08"))) #Last one week
-  #For now, fix the length of the historical window at 9 weeks
-  win_len <- 9
-  window_end = "2017-02-01"
+  
   start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", (7*win_len-1), " days", sep = ""))[2])
   #If the start_date computed initially falls on or before the shutdown, check how many days we are losing because of shutdown, and 
   #adjust those many days from days before shutdown. Shutdown was for 11 days, including both ends.
   revised_start_date <- start_date
-  last_day_of_shutdown = "2017-01-02"
-  first_day_of_shutdown = "2016-12-23"
+  
   if (start_date <= last_day_of_shutdown)
   {
 	lost_days <- as.numeric(difftime(as.Date(last_day_of_shutdown, '%Y-%m-%d'), as.Date(start_date, '%Y-%m-%d'), units = c("days"))) + 1
@@ -174,9 +187,7 @@ generate_dtree_and_plot <- function(user_inputs)
   historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
   
   opfile <- el_yunque(historical_data, user_inputs[["paint_type"]], F = 5, T = 50)
-  frame_grob <- generate_plots_from_dtree_output(defects_per_car, opfile, user_inputs[["view"]])
-  plot_historical <<- frame_grob
-  plot_recent <<- frame_grob
+  frame_grob <- generate_plots_from_dtree_output(recent_data, opfile, user_inputs[["view"]]) #Visual for the user will be based on recent data only
 }
 
 shinyServer(function(input, output) {
@@ -184,28 +195,12 @@ shinyServer(function(input, output) {
     list("view" = input$view, "paint_type" = input$paint_type, "threshold" = input$threshold) 
   })
   
-  pt1 <- reactive({
+  pt <- reactive({
     user_inputs <- userInput()
-    generate_dtree_and_plot(user_inputs)  
-	cat("pt1\n")
-    plot_historical	
+    generate_dtree_and_plot(user_inputs)  	
   })
-  
-  pt2 <- reactive({
-	cat("pt2\n")
-	#plot_recent #Does not work
-    plot(1:10, 1:10) #Works
-  })
-  #pt2 <- plot_recent
-  #pt2 <- plot(1:10 ,10:1)
-  #cat("pt2\n")
-  
-  #output$plotFromTreeOutput <- renderPlot({ 
-  #    user_inputs <- userInput()
-  #    generate_dtree_and_plot(user_inputs)          
-  #   })
-  output$plotgraph1 <- renderPlot({pt1()})
-  output$plotgraph2 <- renderPlot({pt2()})
+    
+  output$plotgraph <- renderPlot({pt()})
   output$dis <- renderDataTable({})
  }
 )
