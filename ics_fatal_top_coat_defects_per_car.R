@@ -1,5 +1,4 @@
 #This analysis is done with ActivPlant data for fatal Top Coat defects only.
-library(plyr)
 library(dplyr)
 library(ggplot2)
 library(rpart)
@@ -95,6 +94,33 @@ shorten_variablename <- function(variablename)
   short_variablenames[which(variablenames == variablename)]
 }
 
+defect_distribution <- function()
+{
+  filename <- paste(filepath_prefix, "tc_defects_per_car.csv", sep = "")
+  tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
+  tc_defects_per_car <- subset(tc_defects_per_car, (manuf_date >= "2016-10-17"))
+  tc_defects_per_car$n_defects <- ifelse((tc_defects_per_car$tot_tc_defects > 3), ">3", as.character(tc_defects_per_car$tot_tc_defects))
+  
+  #by_n_defects <- tc_defects_per_car %>% select(n_defects) %>% group_by(n_defects) %>% summarise(n_vehicles = n())
+  by_n_defects <- aggregate(tc_defects_per_car$vin, by = list(tc_defects_per_car$n_defects), FUN = length)
+  colnames(by_n_defects) <- c("n_defects", "n_vehicles")
+  total_defects <- nrow(tc_defects_per_car)
+  print(total_defects)
+  by_n_defects$percentage <- 100*by_n_defects$n_vehicles/total_defects
+  by_n_defects$n_defects <- factor(by_n_defects$n_defects, levels = c("0", "1", "2", "3", ">3"), ordered = TRUE)
+  by_n_defects <- by_n_defects[order(by_n_defects$n_defects),] 
+  print(by_n_defects)
+    
+  image_file <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\top_coat_defect_distribution.png"
+  png(image_file,  width = 600, height = 480, units = "px")
+  p <- ggplot(by_n_defects, aes(x = factor(n_defects), y = percentage)) + geom_bar(stat = "identity") + xlab("Number of defects") + 
+       ylab("Percentage of vehicles") + 
+       theme(axis.text = element_text(colour = 'blue', size = 16, face = 'bold')) +
+         theme(axis.title = element_text(colour = 'red', size = 16, face = 'bold'))
+  print(p)
+  dev.off()
+}
 
 el_yunque <- function(input_data, F = 5, T = 50)
 {
@@ -134,8 +160,8 @@ bar_plots_for_AP_variables <- function(data_mode, input_data, feature, cutpoint)
 {
   #tree_node defines which group, based on a cutpoint on a feature, a data point belongs to, e.g., TH_AH_4_Temp <= 73.5 or TH_AH_4_Temp > 73.5  
   pdpc_trans <- get_pdpc(input_data, feature, cutpoint)
-  print(feature)
-  print(pdpc_trans)
+  #print(feature)
+  #print(pdpc_trans)
   image_file <- 
     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\top_coat\\",
           feature, "_", cutpoint, "_", data_mode, ".png", sep = "")
@@ -252,25 +278,73 @@ parse_tree_output <- function(model_file)
   df_features_cutpoints
 } 
   
-generate_plots_from_dtree_output <- function(history_win_in_months = 2, window_end = "2016-12-22", threshold = 0)
+#We need to decide which of the features from df_features_cutpoints should be kept as top 4.
+#Any range defined by a cutpoint on a feature, for which we are not getting any points in the
+#recent dataset, should not be included. In such cases, we move on to the next feature.
+check_df_features_cutpoints <- function(df_features_cutpoints, recent_data)
+{
+  new_df_features_cutpoints <- data.frame(feature = character(), cutpoint = numeric(), statistic = numeric(0), stringsAsFactors = FALSE)
+  n_valid_features_obtained <- 0
+  i <- 1
+  while ((n_valid_features_obtained < 4) && (i <= nrow(df_features_cutpoints)))
+  {
+    pdpc_trans <- get_pdpc(recent_data, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"])
+	print(pdpc_trans)
+	if (nrow(pdpc_trans) == 4) #There should be exactly 4 rows in a pdpc_trans as there are four sections (2 yellow, 2 black) in a plot
+	{
+	  new_df_features_cutpoints <- rbind(new_df_features_cutpoints, df_features_cutpoints[i,])
+	  n_valid_features_obtained <- n_valid_features_obtained + 1
+	  cat(paste("Taking ", df_features_cutpoints[i, "feature"], "\n", sep = ""))
+	}
+	else
+	{
+	  cat(paste("Skipping ", df_features_cutpoints[i, "feature"], "\n", sep = ""))
+	}
+	i <- i + 1
+  }
+  new_df_features_cutpoints
+}
+
+generate_plots_from_dtree_output <- function(first_day_of_shutdown = "2016-12-23", last_day_of_shutdown = "2017-01-02", 
+                                             history_win_in_weeks = 7, window_end = "2017-02-01", threshold = 0)
 {
   filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\tc_defects_per_car.csv"
   tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
   tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_tc_defects <= threshold), "Acceptable", "Unacceptable")
   tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
   tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
+    
+  start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", (7*history_win_in_weeks-1), " days", sep = ""))[2])
+  #If the start_date computed initially falls on or before the shutdown, check how many days we are losing because of shutdown, and 
+  #adjust those many days from days before shutdown. Shutdown was for 11 days, including both ends.
+  revised_start_date <- start_date
+  if (start_date <= last_day_of_shutdown)
+  {
+    lost_days <- as.numeric(difftime(as.Date(last_day_of_shutdown, '%Y-%m-%d'), as.Date(start_date, '%Y-%m-%d'), units = c("days"))) + 1
+    last_day_before_shutdown <- as.character(seq(as.Date(first_day_of_shutdown), length = 2, by = "-1 days")[2])
+    revised_start_date <-  as.character(seq(as.Date(last_day_before_shutdown), length = 2, by = paste("-", (lost_days - 1), " days", sep = ""))[2])
+  }
+  cat(paste("start_date = ", start_date, ", revised_start_date = ", revised_start_date, "\n", sep = ""))  
+  historical_data <- subset(tc_defects_per_car, ((manuf_date >= revised_start_date) & (manuf_date <= window_end))) 
+  #Eliminate data corresponding to shutdown period (2016-12-23 to 2017-01-02)
+  historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
   
-  start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", history_win_in_months, " months", sep = ""))[2])
-  historical_data <- subset(tc_defects_per_car, ((manuf_date >= start_date) & (manuf_date <= window_end)))
-
   model_file <- el_yunque(historical_data, F = 5, T = 50)
   df_features_cutpoints <- parse_tree_output(model_file)
+  print(df_features_cutpoints)
   
+  recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-02-02") & (manuf_date <= "2017-02-08")))  #Does not depend on window size
+  df_features_cutpoints <- check_df_features_cutpoints(df_features_cutpoints, recent_data)
+  print(df_features_cutpoints)
+  
+  #Writing to file is taken care of within barplot_grid_view_from_tree_output()
   frame_grob <- barplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints)
-    
-  #Validate the tree models on last one month's data using the bar plot for now
-  recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-01-03") & (manuf_date <= "2017-02-08")))
+  #frame_grob <- boxplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints)
+  
+  #Validate the tree models on last one week's data using the bar plot for now
+  
   frame_grob <- barplot_grid_view_from_tree_output(data_mode = "recent", recent_data, df_features_cutpoints)
+  #frame_grob <- boxplot_grid_view_from_tree_output(data_mode = "recent", recent_data, df_features_cutpoints)
 }
 
 
@@ -465,11 +539,12 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
 #tc_defects_per_car <- create_per_vehicle_averages()
 #dtree <- el_yunque(threshold = 0)
 #Note the filename before running generate_plots_from_dtree_output()
-#frame_grob <- generate_plots_from_dtree_output()
+frame_grob <- generate_plots_from_dtree_output()
 #At threshold = 2, the decision tree algorithm does not generate any real tree at all since 
 #only 4% of the vehicles have more than 2 defects
 #win_len_and_score <- find_optimal_window_for_training_model_by_month(threshold = 2)
 #plot_win_len_and_score()
 #utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
 #check_weekly_windows(threshold = 0)
-win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 0)
+#win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 0)
+#defect_distribution()
