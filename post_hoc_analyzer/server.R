@@ -57,9 +57,6 @@ bar_plots_for_AP_variables <- function(input_data, feature, cutpoint)
 {
   #tree_node defines which group, based on a cutpoint on a feature, a data point belongs to, e.g., TH_AH_4_Temp <= 73.5 or TH_AH_4_Temp > 73.5  
   pdpc_trans <- get_pdpc(input_data, feature, cutpoint)
-  print(feature)
-  print(pdpc_trans)
-  
   cbbPalette <- c("#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
   p <- ggplot(pdpc_trans, aes(x = factor(tree_node), y = perc, fill = defect_report)) +
     geom_bar(stat = "identity", width = 0.7) + 
@@ -142,13 +139,31 @@ parse_tree_output <- function(model_file)
   df_features_cutpoints
 }
 
-generate_plots_from_dtree_output <- function(input_data, model_file, view)
+#We need to decide which of the features from df_features_cutpoints should be kept as top 4.
+#Any range defined by a cutpoint on a feature, for which we are not getting any points in the
+#recent dataset, should not be included. In such cases, we move on to the next feature.
+check_df_features_cutpoints <- function(df_features_cutpoints, recent_data)
 {
-  df_features_cutpoints <- parse_tree_output(model_file)
+  new_df_features_cutpoints <- data.frame(feature = character(), cutpoint = numeric(), statistic = numeric(0), stringsAsFactors = FALSE)
+  n_valid_features_obtained <- 0
+  i <- 1
+  while ((n_valid_features_obtained < 4) && (i <= nrow(df_features_cutpoints)))
+  {
+    pdpc_trans <- get_pdpc(recent_data, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"])
+	if (nrow(pdpc_trans) == 4) #There should be exactly 4 rows in a pdpc_trans as there are four sections (2 yellow, 2 black) in a plot
+	{
+	  new_df_features_cutpoints <- rbind(new_df_features_cutpoints, df_features_cutpoints[i,])
+	  n_valid_features_obtained <- n_valid_features_obtained + 1
+	}
+	i <- i + 1
+  }
+  new_df_features_cutpoints
+}
+
+generate_plots_from_dtree_output <- function(input_data, df_features_cutpoints, view)
+{
   hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #What if we do not get even 4 features?
   df_features_cutpoints <- df_features_cutpoints[1:hmfp, ] 
-  print(df_features_cutpoints)
-  
   frame_grob <- ifelse((view == "bar_plot"), barplot_grid_view_from_tree_output(input_data, df_features_cutpoints),
                                                boxplot_grid_view_from_tree_output(input_data, df_features_cutpoints))
 }
@@ -187,7 +202,12 @@ generate_dtree_and_plot <- function(user_inputs, window_end = "2017-02-01", firs
   historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
   
   opfile <- el_yunque(historical_data, user_inputs[["paint_type"]], F = 5, T = 50)
-  frame_grob <- generate_plots_from_dtree_output(recent_data, opfile, user_inputs[["view"]]) #Visual for the user will be based on recent data only
+  df_features_cutpoints <- parse_tree_output(opfile)
+  df_features_cutpoints <- check_df_features_cutpoints(df_features_cutpoints, recent_data)
+  print(df_features_cutpoints)
+  #The visual will always load the one based on recent data, and will load the one on historical only if the user asks for it
+  plot_historical <<- generate_plots_from_dtree_output(historical_data, df_features_cutpoints, user_inputs[["view"]]) 
+  plot_recent <<- generate_plots_from_dtree_output(recent_data, df_features_cutpoints, user_inputs[["view"]])
 }
 
 shinyServer(function(input, output) {

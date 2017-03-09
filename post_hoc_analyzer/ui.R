@@ -7,7 +7,8 @@ shinyUI(fluidPage(
                   choices = list("Bar Plot" = 'bar_plot', "Box Plot" = 'box_plot'), selected = 'bar_plot')),
 		column(2, radioButtons("paint_type", label = "Paint Type",
                   choices = list("Primer" = 'primer', "Top Coat" = 'top_coat'), selected = 'primer')),
-	    column(6, numericInput("threshold", "Threshold on no. of defects (between 0 and 13):", 0, min = 0, max = 13))
+	    column(6, numericInput("threshold", "Threshold on #defects:", 0, min = 0, max = 13))
+		#column(3, checkboxInput("load_historical", "Load Historical?", value = F))
 	   ),
 	   fluidRow(column(12, h3(""))),
 	   fluidRow( 
@@ -18,16 +19,9 @@ shinyUI(fluidPage(
 	   mainPanel(
          tabsetPanel(
            tabPanel("Summary", dataTableOutput("dis")),
-           tabPanel("Historical", plotOutput(outputId = "plotgraph1")),
-           tabPanel("Recent", plotOutput(outputId = "plotgraph2"))
+           tabPanel("Visualization", plotOutput(outputId = "plotgraph"))
          )
        )
-	   #mainPanel(
-         #fluidRow(
-         # column(6, plotOutput(outputId = "plotgraph1", width = "100%")),  
-         # column(6, plotOutput(outputId = "plotgraph1", width = "100%"))
-        #)
-    #)
   )
 )
 
