@@ -19,7 +19,8 @@ shinyUI(fluidPage(
 	   mainPanel(
          tabsetPanel(
            tabPanel("Summary", dataTableOutput("dis")),
-           tabPanel("Visualization", plotOutput(outputId = "plotgraph"))
+           tabPanel("Visualization", plotOutput(outputId = "plotgraph", width = "800px")) 
+		   #The above statement generates HTML code like this: <div id="plotgraph" class="shiny-plot-output" style="width: 100% ; height: 400px"></div>
          )
        )
   )

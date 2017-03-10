@@ -30,15 +30,8 @@ el_yunque <- function(defects_per_car, paint_type, F = 5, T = 50)
 	formula_str <- paste("defect_report ~ ", paste(sampled_features, collapse = " + "), sep = "")
     #dtree <- rpart(as.formula(formula_str), data = defects_per_car)
 	dtree <- ctree(as.formula(formula_str), data = defects_per_car, controls = ctree_control(maxdepth = 1))
-	#if (!is.null(dtree$splits))
-	#{
-	  #No point in printing decision trees with root node only
-	  cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
-	  print(dtree)
-	  #print_dtree(dtree)
-	#}
+	print(dtree)
   }
-  #sink()
   closeAllConnections()
   opfile
 }
@@ -59,7 +52,7 @@ bar_plots_for_AP_variables <- function(input_data, feature, cutpoint)
   pdpc_trans <- get_pdpc(input_data, feature, cutpoint)
   cbbPalette <- c("#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
   p <- ggplot(pdpc_trans, aes(x = factor(tree_node), y = perc, fill = defect_report)) +
-    geom_bar(stat = "identity", width = 0.7) + 
+    geom_bar(stat = "identity", width = 0.7) + coord_equal() +  
 	#In ggplot_2.2.0, fill order is based on the order of the factor levels. 
 	#The default order will plot the first level at the top of the stack instead of the bottom. 
 	#If you want the first level at the bottom of the stack, use position_stack(reverse = TRUE).
@@ -68,20 +61,17 @@ bar_plots_for_AP_variables <- function(input_data, feature, cutpoint)
     labs(x = paste("Range for ", feature, sep = ""), y = "percent") + ggtitle(feature) + 
     theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
           axis.text.y = element_text(size = 12, color = 'black', face = 'bold'),
-          plot.title = element_text(lineheight = .8, face = "bold"))
+          plot.title = element_text(lineheight = .8, face = "bold"),
+		  aspect.ratio = 0.6)
   p
 }
 
 barplot_grid_view_from_tree_output <- function(input_data, df_features_cutpoints, how_many = 4)
 {
-  gp1 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(input_data, df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
-  gp2 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(input_data, df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
-  gp3 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(input_data, df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
-  gp4 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(input_data, df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
-  
-  frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
-                             #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
-                            )
+  cat(paste("In barplot_grid_view_from_tree_output, how_many = ", how_many, "\n", sep = ""))
+  plots = lapply(1:how_many, 
+          function(i) bar_plots_for_AP_variables(input_data, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"]))
+  do.call(grid.arrange, plots)
 }
 
 box_plots_for_AP_variables <- function(defects_per_car, feature)
@@ -164,14 +154,15 @@ generate_plots_from_dtree_output <- function(input_data, df_features_cutpoints, 
 {
   hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #What if we do not get even 4 features?
   df_features_cutpoints <- df_features_cutpoints[1:hmfp, ] 
-  frame_grob <- ifelse((view == "bar_plot"), barplot_grid_view_from_tree_output(input_data, df_features_cutpoints),
-                                               boxplot_grid_view_from_tree_output(input_data, df_features_cutpoints))
+  frame_grob <- ifelse((view == "bar_plot"), barplot_grid_view_from_tree_output(input_data, df_features_cutpoints, hmfp),
+                                               boxplot_grid_view_from_tree_output(input_data, df_features_cutpoints, hmfp))
 }
 
 #Reads input data, splits it into historical and recent, builds model on historical and applies it back on both historical and recent to 
 #generate the plots. For now, fix the length of the historical window at 5 weeks for primer and 7 weeks for top coat.
 generate_dtree_and_plot <- function(user_inputs, window_end = "2017-02-01", first_day_of_shutdown = "2016-12-23", last_day_of_shutdown = "2017-01-02")
 {
+  cat(paste("paint_type = ", user_inputs[["paint_type"]], ", threshold = ", user_inputs[["threshold"]], "\n", sep = ""))
   filename <- paste(filepath_prefix, 
                     ifelse((user_inputs[["paint_type"]] == "primer"), "primer_defects_per_car.csv", "tc_defects_per_car.csv"),
 					sep = "")
@@ -202,6 +193,8 @@ generate_dtree_and_plot <- function(user_inputs, window_end = "2017-02-01", firs
   historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
   
   opfile <- el_yunque(historical_data, user_inputs[["paint_type"]], F = 5, T = 50)
+  #Handling edge cases: what if we less than 4 significant variables? If there are some, but less than 4 (e.g., primer and threshold 3), 
+  #we should adjust the plot dynamically. If there are none, we should give a message only. 
   df_features_cutpoints <- parse_tree_output(opfile)
   df_features_cutpoints <- check_df_features_cutpoints(df_features_cutpoints, recent_data)
   print(df_features_cutpoints)
