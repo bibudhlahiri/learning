@@ -145,6 +145,7 @@ el_yunque <- function(input_data, F = 5, T = 50)
     #input_data has 18% from Unacceptable class for threshold = 0
     #Creating decision stumps only as this will give insights easy to interpret
     dtree <- ctree(as.formula(formula_str), data = input_data, controls = ctree_control(maxdepth = 1, savesplitstats = TRUE))
+	#dtree <- rpart(as.formula(formula_str), data = input_data) 
     cat(paste("\n\nformula_str = ", formula_str, "\n", sep = ""))
     print(dtree)  
   }
@@ -446,12 +447,43 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
   win_len_and_score
 }
 
+
+lengthen_eventname <- function(short_eventname)
+{
+  short_eventnames <- c("BP1", "BP2", "TH", "CP1", "CP2")
+  eventnames <- c("Base Process 1", "Base Process 2", "C Booth Temp_Humidity", "Clear Process 1", "Clear Process 2")
+  eventnames[which(short_eventnames == short_eventname)]
+}
+
+lengthen_variablename <- function(short_variablename)
+{
+  cat(paste("short_variablename = ", short_variablename, "\n", sep = ""))
+  short_variablenames <- c("AM", "HV", "Temp", "Hum")
+  variablenames <- c("motor speed", "voltage", "temperature", "humidity")
+  variablenames[which(short_variablenames == short_variablename)]
+}
+					 
+#Generate a recommendation text given a 4-row percentages for a given stacked bar plot 
+generate_summary_text <- function(pdpc_trans, feature, cutpoint)
+{
+  unacc <- subset(pdpc_trans, (defect_report == "Unacceptable"))
+  which_side_low <- which.min(unacc$perc)
+  recommended_range <- unacc[which_side_low, "tree_node"]
+  feature_components <- unlist(strsplit(feature, "_"))
+  
+  paste("Keep ", lengthen_variablename(feature_components[4]), " of ", 
+        ifelse((feature_components[3] == "Robot"), paste("Robot", feature_components[2], sep = ""), paste("Air house", feature_components[3], sep = " ")),
+        ifelse((feature_components[2] == "AH"), "", paste(", ", lengthen_eventname(feature_components[1]), sep = "")),		
+        ifelse((substr(recommended_range, 1, 1) == "<"), " below ", " above "),
+		cutpoint, sep = "")
+} 
+
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code_local\\ics_fatal_pf_defects_per_car_on_cluster.R")
 #median_CV_by_var <- primer_analysis_per_car_process_variable()
 #primer_defects_per_car <- create_per_vehicle_averages()
 #dtree <- el_yunque(threshold = 0)
 #Note the filename before running generate_plots_from_dtree_output()
-frame_grob <- generate_plots_from_dtree_output()
+#frame_grob <- generate_plots_from_dtree_output()
 #At threshold = 2, the decision tree algorithm does not generate any real tree at all since 
 #only 4% of the vehicles have more than 2 defects
 #win_len_and_score <- find_optimal_window_for_training_model_by_month(threshold = 2)
@@ -460,3 +492,9 @@ frame_grob <- generate_plots_from_dtree_output()
 #check_weekly_windows(threshold = 0)
 #win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 0)
 #defect_distribution()
+
+pdpc_trans <- data.frame(tree_node = c("<= 641.6667", "<= 641.6667", "> 641.6667", "> 641.6667"),
+                         defect_report = c("Acceptable", "Unacceptable", "Acceptable", "Unacceptable"),
+						 count = c(482, 142, 8, 7),
+						 perc = c(77.24, 22.76, 53.33, 46.67))
+print(generate_summary_text(pdpc_trans, "TH_AH_2_Temp", 641.6667))
