@@ -33,6 +33,36 @@ el_yunque <- function(defects_per_car, paint_type, F = 5, T = 50)
   model_file
 }
 
+lengthen_eventname <- function(short_eventname)
+{
+  short_eventnames <- c("BP1", "BP2", "TH", "CP1", "CP2")
+  eventnames <- c("Base Process 1", "Base Process 2", "C Booth Temp_Humidity", "Clear Process 1", "Clear Process 2")
+  eventnames[which(short_eventnames == short_eventname)]
+}
+
+lengthen_variablename <- function(short_variablename)
+{
+  cat(paste("short_variablename = ", short_variablename, "\n", sep = ""))
+  short_variablenames <- c("AM", "HV", "Temp", "Hum")
+  variablenames <- c("motor speed", "voltage", "temperature", "humidity")
+  variablenames[which(short_variablenames == short_variablename)]
+}
+					 
+#Generate a recommendation text given a 4-row percentages for a given stacked bar plot 
+generate_summary_text <- function(pdpc_trans, feature, cutpoint)
+{
+  unacc <- subset(pdpc_trans, (defect_report == "Unacceptable"))
+  which_side_low <- which.min(unacc$perc)
+  recommended_range <- unacc[which_side_low, "tree_node"]
+  feature_components <- unlist(strsplit(feature, "_"))
+  
+  paste("Keep ", lengthen_variablename(feature_components[4]), " of ", 
+        ifelse((feature_components[3] == "Robot"), paste("Robot", feature_components[2], sep = ""), paste("Air house", feature_components[3], sep = " ")),
+        ifelse((feature_components[2] == "AH"), "", paste(", ", lengthen_eventname(feature_components[1]), sep = "")),		
+        ifelse((substr(recommended_range, 1, 1) == "<"), " below ", " above "),
+		cutpoint, sep = "")
+} 
+
 get_pdpc <- function(input_data, feature, cutpoint)
 {
   input_data$tree_node <- ifelse((input_data[, feature] <= cutpoint), paste(" <= ", cutpoint, sep = ""),
@@ -40,6 +70,8 @@ get_pdpc <- function(input_data, feature, cutpoint)
   pdpc_trans <- input_data %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = round(100*count/sum(count), 2)) %>%
                 ungroup() %>% group_by(tree_node) %>% mutate(csum = cumsum(perc), range_sum = sum(count)) %>% mutate(pos = csum - 0.5*perc) %>%  
 				mutate(caption = paste(perc, " (", count, "/", range_sum, ")", sep = ""))
+  print(pdpc_trans)
+  generate_summary_text(pdpc_trans, feature, cutpoint)
   pdpc_trans
 }
 
@@ -62,11 +94,6 @@ bar_plots_for_AP_variables <- function(input_data, feature, cutpoint)
 		  aspect.ratio = 0.6)
   p
 }
-
-generate_summary_text <- function(input_data, df_features_cutpoints, how_many = 4)
-{
-  
-} 
 
 barplot_grid_view_from_tree_output <- function(input_data, df_features_cutpoints, how_many = 4)
 {
@@ -213,7 +240,6 @@ generate_dtree_and_plot <- function(user_inputs, window_end = "2017-02-01", firs
   #we should adjust the plot dynamically. If there are none (e.g., primer and threshold 4), we should give a message only. 
   df_features_cutpoints <- parse_tree_output(model_file)
   df_features_cutpoints <- check_df_features_cutpoints(df_features_cutpoints, recent_data)
-  print(df_features_cutpoints)
   #The visual will always load the one based on recent data, and will load the one on historical only if the user asks for it
   plot_historical <<- generate_plots_from_dtree_output(historical_data, df_features_cutpoints, user_inputs[["view"]]) 
   plot_recent <<- generate_plots_from_dtree_output(recent_data, df_features_cutpoints, user_inputs[["view"]])
