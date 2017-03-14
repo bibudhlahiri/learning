@@ -10,14 +10,9 @@ plot_recent <<- NA
 
 el_yunque <- function(defects_per_car, paint_type, F = 5, T = 50)
 {  
-  #Save the output trees in a file named by the timestamp at which it is generated, so that multiple runs do not overwrite results
-  timestr <- as.character(Sys.time())
-  timestr <- gsub("-", "_", timestr)
-  timestr <- gsub(" ", "_", timestr)
-  timestr <- gsub(":", "_", timestr)
-  #opfile <- paste(filepath_prefix, "Tree_outputs\\", paint_type, "\\Tree_output_", timestr, ".txt", sep = "")
-  opfile <- textConnection("model_file", open = "a")
-    
+  #Save the output trees in a text connection that is stored in memory. Open it in write mode (not append) 
+  #so that later runs do not append to the previous runs.
+  opfile <- textConnection("model_file", open = "w")    
   features <- colnames(defects_per_car)
   non_features <- c("defect_report", "vin", "manuf_date")
   column <- ifelse((paint_type == "primer"), "tot_prim_defects", "tot_tc_defects")
@@ -34,12 +29,8 @@ el_yunque <- function(defects_per_car, paint_type, F = 5, T = 50)
 	print(dtree)
   }
   sink()
-  #close(opfile)
-  #closeAllConnections()
-  #cat(model_file) 
-  #class(model_file) = character, class(opfile) = textConnection
-  #cat(paste("class(model_file) = ", class(model_file), ", class(opfile) = ", class(opfile), "\n", sep = ""))
-  opfile
+  close(opfile)
+  model_file
 }
 
 get_pdpc <- function(input_data, feature, cutpoint)
@@ -49,7 +40,6 @@ get_pdpc <- function(input_data, feature, cutpoint)
   pdpc_trans <- input_data %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = round(100*count/sum(count), 2)) %>%
                 ungroup() %>% group_by(tree_node) %>% mutate(csum = cumsum(perc), range_sum = sum(count)) %>% mutate(pos = csum - 0.5*perc) %>%  
 				mutate(caption = paste(perc, " (", count, "/", range_sum, ")", sep = ""))
-  print(pdpc_trans)
   pdpc_trans
 }
 
@@ -128,11 +118,9 @@ boxplot_grid_view_from_tree_output <- function(defects_per_car, df_features_cutp
 
 parse_tree_output <- function(model_file)
 {
-  #cat("Inside parse_tree_output\n")
-  #cat(model_file, sep = "\n")
-  #lines <- readLines(model_file) 
   lines <- model_file
   n_lines <- length(lines)
+  cat(paste("n_lines = ", n_lines, "\n", sep = ""))
   df_features_cutpoints <- data.frame(feature = character(), cutpoint = numeric(), statistic = numeric(0), stringsAsFactors = FALSE)
   
   row_number <- 1
@@ -189,6 +177,7 @@ generate_plots_from_dtree_output <- function(input_data, df_features_cutpoints, 
 #generate the plots. For now, fix the length of the historical window at 5 weeks for primer and 7 weeks for top coat.
 generate_dtree_and_plot <- function(user_inputs, window_end = "2017-02-01", first_day_of_shutdown = "2016-12-23", last_day_of_shutdown = "2017-01-02")
 {
+  cat(paste("paint_type = ", user_inputs[["paint_type"]], ", threshold = ", user_inputs[["threshold"]], "\n", sep = ""))
   filename <- paste(filepath_prefix, 
                     ifelse((user_inputs[["paint_type"]] == "primer"), "primer_defects_per_car.csv", "tc_defects_per_car.csv"),
 					sep = "")
@@ -218,19 +207,16 @@ generate_dtree_and_plot <- function(user_inputs, window_end = "2017-02-01", firs
   #Eliminate data corresponding to shutdown period (2016-12-23 to 2017-01-02)
   historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
   
-  opfile <- el_yunque(historical_data, user_inputs[["paint_type"]], F = 5, T = 50)
-  cat(model_file, sep = "\n") #Works from here
+  model_file <- el_yunque(historical_data, user_inputs[["paint_type"]], F = 5, T = 50)
+  
   #Handling edge cases: what if we less than 4 significant variables? If there are some, but less than 4 (e.g., primer and threshold 3), 
   #we should adjust the plot dynamically. If there are none (e.g., primer and threshold 4), we should give a message only. 
-  #df_features_cutpoints <- parse_tree_output(opfile)
   df_features_cutpoints <- parse_tree_output(model_file)
   df_features_cutpoints <- check_df_features_cutpoints(df_features_cutpoints, recent_data)
   print(df_features_cutpoints)
   #The visual will always load the one based on recent data, and will load the one on historical only if the user asks for it
   plot_historical <<- generate_plots_from_dtree_output(historical_data, df_features_cutpoints, user_inputs[["view"]]) 
   plot_recent <<- generate_plots_from_dtree_output(recent_data, df_features_cutpoints, user_inputs[["view"]])
-  cat(paste("class(plot_recent) = ", class(plot_recent), "\n", sep = ""))
-  plot_recent
 }
 
 shinyServer(function(input, output) {
