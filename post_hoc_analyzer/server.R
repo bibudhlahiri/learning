@@ -33,36 +33,6 @@ el_yunque <- function(defects_per_car, paint_type, F = 5, T = 50)
   model_file
 }
 
-lengthen_eventname <- function(short_eventname)
-{
-  short_eventnames <- c("BP1", "BP2", "TH", "CP1", "CP2")
-  eventnames <- c("Base Process 1", "Base Process 2", "C Booth Temp_Humidity", "Clear Process 1", "Clear Process 2")
-  eventnames[which(short_eventnames == short_eventname)]
-}
-
-lengthen_variablename <- function(short_variablename)
-{
-  cat(paste("short_variablename = ", short_variablename, "\n", sep = ""))
-  short_variablenames <- c("AM", "HV", "Temp", "Hum")
-  variablenames <- c("motor speed", "voltage", "temperature", "humidity")
-  variablenames[which(short_variablenames == short_variablename)]
-}
-					 
-#Generate a recommendation text given a 4-row percentages for a given stacked bar plot 
-generate_summary_text <- function(pdpc_trans, feature, cutpoint)
-{
-  unacc <- subset(pdpc_trans, (defect_report == "Unacceptable"))
-  which_side_low <- which.min(unacc$perc)
-  recommended_range <- unacc[which_side_low, "tree_node"]
-  feature_components <- unlist(strsplit(feature, "_"))
-  
-  paste("Keep ", lengthen_variablename(feature_components[4]), " of ", 
-        ifelse((feature_components[3] == "Robot"), paste("Robot", feature_components[2], sep = ""), paste("Air house", feature_components[3], sep = " ")),
-        ifelse((feature_components[2] == "AH"), "", paste(", ", lengthen_eventname(feature_components[1]), sep = "")),		
-        ifelse((substr(recommended_range, 1, 1) == "<"), " below ", " above "),
-		cutpoint, sep = "")
-} 
-
 get_pdpc <- function(input_data, feature, cutpoint)
 {
   input_data$tree_node <- ifelse((input_data[, feature] <= cutpoint), paste(" <= ", cutpoint, sep = ""),
@@ -70,7 +40,6 @@ get_pdpc <- function(input_data, feature, cutpoint)
   pdpc_trans <- input_data %>% group_by(tree_node, defect_report) %>% summarise(count = n()) %>% mutate(perc = round(100*count/sum(count), 2)) %>%
                 ungroup() %>% group_by(tree_node) %>% mutate(csum = cumsum(perc), range_sum = sum(count)) %>% mutate(pos = csum - 0.5*perc) %>%  
 				mutate(caption = paste(perc, " (", count, "/", range_sum, ")", sep = ""))
-  print(pdpc_trans)
   generate_summary_text(pdpc_trans, feature, cutpoint)
   pdpc_trans
 }
@@ -97,18 +66,15 @@ bar_plots_for_AP_variables <- function(input_data, feature, cutpoint)
 
 barplot_grid_view_from_tree_output <- function(input_data, df_features_cutpoints, how_many = 4)
 {
-  cat(paste("In barplot_grid_view_from_tree_output, how_many = ", how_many, "\n", sep = ""))
   if (how_many > 0)
   {
-    cat("1\n")
     plots = lapply(1:how_many, 
-          function(i) bar_plots_for_AP_variables(input_data, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"]))
+                   function(i) bar_plots_for_AP_variables(input_data, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"]))
     return(do.call(grid.arrange, plots))
   }
   else 
   {
     #TODO: Display of text when there is no viz to show is not working
-    cat("2\n")
     text = "\nNo significant pattern found for the given input\n"
     return(ggplot() + annotate("text", x = 4, y = 25, size = 8, label = text) + theme_bw() + 
 	       theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))
@@ -147,7 +113,6 @@ parse_tree_output <- function(model_file)
 {
   lines <- model_file
   n_lines <- length(lines)
-  cat(paste("n_lines = ", n_lines, "\n", sep = ""))
   df_features_cutpoints <- data.frame(feature = character(), cutpoint = numeric(), statistic = numeric(0), stringsAsFactors = FALSE)
   
   row_number <- 1
@@ -200,6 +165,48 @@ generate_plots_from_dtree_output <- function(input_data, df_features_cutpoints, 
                                                boxplot_grid_view_from_tree_output(input_data, df_features_cutpoints, hmfp))
 }
 
+lengthen_eventname <- function(short_eventname)
+{
+  short_eventnames <- c("BP1", "BP2", "TH", "CP1", "CP2")
+  eventnames <- c("Base Process 1", "Base Process 2", "C Booth Temp_Humidity", "Clear Process 1", "Clear Process 2")
+  eventnames[which(short_eventnames == short_eventname)]
+}
+
+lengthen_variablename <- function(short_variablename)
+{
+  short_variablenames <- c("AM", "HV", "Temp", "Hum")
+  variablenames <- c("motor speed", "voltage", "temperature", "humidity")
+  variablenames[which(short_variablenames == short_variablename)]
+}
+					 
+#Generate a recommendation text given a 4-row percentages for a given stacked bar plot.
+#pdpc_trans is the corresponding 4-row summary for a given bar plot. 
+generate_summary_text <- function(pdpc_trans, feature, cutpoint)
+{
+  unacc <- subset(pdpc_trans, (defect_report == "Unacceptable"))
+  which_side_low <- which.min(unacc$perc)
+  recommended_range <- unacc[which_side_low, "tree_node"]
+  feature_components <- unlist(strsplit(feature, "_"))
+  
+  paste("Keep ", lengthen_variablename(feature_components[4]), " of ", 
+        ifelse((feature_components[3] == "Robot"), paste("Robot", feature_components[2], sep = ""), paste("Air house", feature_components[3], sep = " ")),
+        ifelse((feature_components[2] == "AH"), "", paste(", ", lengthen_eventname(feature_components[1]), sep = "")),		
+        ifelse((substr(recommended_range, 1, 1) == "<"), " below ", " above "),
+		cutpoint, sep = "")
+} 
+
+#Generate the string for the summary tab combining the summaries for all stacked bar plots
+generate_summary_from_dtree_output <- function(input_data, df_features_cutpoints, how_many = 4)
+{
+  summary_string <- ""
+  for (i in 1:how_many)
+  {
+    pdpc_trans <- get_pdpc(input_data, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"])
+    summary_string <- paste(summary_string, "\n", generate_summary_text(pdpc_trans, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"]), sep = "")
+  }
+  cat(summary_string)
+}
+
 #Reads input data, splits it into historical and recent, builds model on historical and applies it back on both historical and recent to 
 #generate the plots. For now, fix the length of the historical window at 5 weeks for primer and 7 weeks for top coat.
 generate_dtree_and_plot <- function(user_inputs, window_end = "2017-02-01", first_day_of_shutdown = "2016-12-23", last_day_of_shutdown = "2017-01-02")
@@ -241,6 +248,7 @@ generate_dtree_and_plot <- function(user_inputs, window_end = "2017-02-01", firs
   df_features_cutpoints <- parse_tree_output(model_file)
   df_features_cutpoints <- check_df_features_cutpoints(df_features_cutpoints, recent_data)
   #The visual will always load the one based on recent data, and will load the one on historical only if the user asks for it
+  generate_summary_from_dtree_output(recent_data, df_features_cutpoints, how_many = 4)
   plot_historical <<- generate_plots_from_dtree_output(historical_data, df_features_cutpoints, user_inputs[["view"]]) 
   plot_recent <<- generate_plots_from_dtree_output(recent_data, df_features_cutpoints, user_inputs[["view"]])
 }
