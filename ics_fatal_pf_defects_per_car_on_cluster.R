@@ -457,7 +457,6 @@ lengthen_eventname <- function(short_eventname)
 
 lengthen_variablename <- function(short_variablename)
 {
-  cat(paste("short_variablename = ", short_variablename, "\n", sep = ""))
   short_variablenames <- c("AM", "HV", "Temp", "Hum")
   variablenames <- c("motor speed", "voltage", "temperature", "humidity")
   variablenames[which(short_variablenames == short_variablename)]
@@ -474,9 +473,29 @@ generate_summary_text <- function(pdpc_trans, feature, cutpoint)
   paste("Keep ", lengthen_variablename(feature_components[4]), " of ", 
         ifelse((feature_components[3] == "Robot"), paste("Robot", feature_components[2], sep = ""), paste("Air house", feature_components[3], sep = " ")),
         ifelse((feature_components[2] == "AH"), "", paste(", ", lengthen_eventname(feature_components[1]), sep = "")),		
-        ifelse((substr(recommended_range, 1, 1) == "<"), " below ", " above "),
+        ifelse((substr(recommended_range, 1, 2) == " <"), " below ", " above "),
 		cutpoint, sep = "")
 } 
+
+embed_summary_text_in_plot <- function()
+{
+  pdpc_trans <- data.frame(tree_node = c(" <= 641.6667", " <= 641.6667", " > 641.6667", " > 641.6667"),
+                         defect_report = c("Acceptable", "Unacceptable", "Acceptable", "Unacceptable"),
+						 count = c(482, 142, 8, 7),
+						 perc = c(77.24, 22.76, 53.33, 46.67))
+  image_file <- 
+     "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\primer_summary_text.png"
+  png(image_file, width = 600, height = 480, units = "px")
+  
+  text = generate_summary_text(pdpc_trans, "TH_AH_2_Temp", 641.6667)
+  p <- ggplot() + annotate("text", x = 4, y = 25, size = 8, label = text) + theme_bw() + 
+	       theme(axis.line = element_blank(), axis.text.x = element_blank(),
+                 axis.text.y = element_blank(),axis.ticks = element_blank(),
+                 axis.title.x = element_blank(),
+                 axis.title.y = element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+  print(p)
+  dev.off()
+}
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code_local\\ics_fatal_pf_defects_per_car_on_cluster.R")
 #median_CV_by_var <- primer_analysis_per_car_process_variable()
@@ -492,9 +511,4 @@ generate_summary_text <- function(pdpc_trans, feature, cutpoint)
 #check_weekly_windows(threshold = 0)
 #win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 0)
 #defect_distribution()
-
-pdpc_trans <- data.frame(tree_node = c("<= 641.6667", "<= 641.6667", "> 641.6667", "> 641.6667"),
-                         defect_report = c("Acceptable", "Unacceptable", "Acceptable", "Unacceptable"),
-						 count = c(482, 142, 8, 7),
-						 perc = c(77.24, 22.76, 53.33, 46.67))
-print(generate_summary_text(pdpc_trans, "TH_AH_2_Temp", 641.6667))
+embed_summary_text_in_plot()
