@@ -289,16 +289,10 @@ check_df_features_cutpoints <- function(df_features_cutpoints, recent_data)
   while ((n_valid_features_obtained < 4) && (i <= nrow(df_features_cutpoints)))
   {
     pdpc_trans <- get_pdpc(recent_data, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"])
-	print(pdpc_trans)
 	if (nrow(pdpc_trans) == 4) #There should be exactly 4 rows in a pdpc_trans as there are four sections (2 yellow, 2 black) in a plot
 	{
 	  new_df_features_cutpoints <- rbind(new_df_features_cutpoints, df_features_cutpoints[i,])
 	  n_valid_features_obtained <- n_valid_features_obtained + 1
-	  cat(paste("Taking ", df_features_cutpoints[i, "feature"], "\n", sep = ""))
-	}
-	else
-	{
-	  cat(paste("Skipping ", df_features_cutpoints[i, "feature"], "\n", sep = ""))
 	}
 	i <- i + 1
   }
@@ -331,12 +325,10 @@ generate_plots_from_dtree_output <- function(first_day_of_shutdown = "2016-12-23
   
   model_file <- el_yunque(historical_data, F = 5, T = 50)
   df_features_cutpoints <- parse_tree_output(model_file)
-  print(df_features_cutpoints)
-  
+    
   recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-02-02") & (manuf_date <= "2017-02-08")))  #Does not depend on window size
   df_features_cutpoints <- check_df_features_cutpoints(df_features_cutpoints, recent_data)
-  print(df_features_cutpoints)
-  
+    
   #Writing to file is taken care of within barplot_grid_view_from_tree_output()
   frame_grob <- barplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints)
   #frame_grob <- boxplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints)
@@ -398,11 +390,22 @@ score_window_size <- function(historical_data, recent_data, df_features_cutpoint
 #attributes cross cut-points identified by the decision trees.
 compute_utility_score <- function(input_data, data_mode, df_features_cutpoints, how_many_from_pdpc = 4)
 {
-  pdpc <- get_pdpc_historical_or_recent(input_data, data_mode, how_many_from_pdpc, df_features_cutpoints)  
+  pdpc <- get_pdpc_historical_or_recent(input_data, data_mode, how_many_from_pdpc, df_features_cutpoints) 
   unacc <- subset(pdpc, (defect_report == "Unacceptable"))
   unacc$which_side <- ifelse((substr(unacc$tree_node, 1, 2) == ' >'), "greater_than", "less_than")
   unacc <- unacc[, c("feature", "which_side", "perc")]
   unacc_wide <- dcast(unacc, feature ~ which_side, value.var = "perc")
+  #It is possible that the column greater_than or less_than may not appear in unacc_wide, depending on the
+  #data and the threshold. Check for those conditions and handle.
+  if (!("less_than" %in% colnames(unacc_wide)))
+  {
+    unacc_wide$less_than <- 0
+  }  
+  if (!("greater_than" %in% colnames(unacc_wide)))
+  {
+    unacc_wide$greater_than <- 0
+  }
+  #The following two lines will replace values in columns greater_than or less_than by 0 if they are NA
   unacc_wide$greater_than[is.na(unacc_wide$greater_than)] <- 0
   unacc_wide$less_than[is.na(unacc_wide$less_than)] <- 0
   utility <- mean(abs(unacc_wide$greater_than - unacc_wide$less_than)/unacc_wide$less_than)
@@ -531,7 +534,7 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
   print(win_len_and_score)
   filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
   write.table(win_len_and_score, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
-  win_len_and_score
+  win_len_and_score[which.max(win_len_and_score$final_score), "win_len"]
 }
 
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code_local\\ics_fatal_top_coat_defects_per_car.R")
@@ -539,12 +542,12 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
 #tc_defects_per_car <- create_per_vehicle_averages()
 #dtree <- el_yunque(threshold = 0)
 #Note the filename before running generate_plots_from_dtree_output()
-frame_grob <- generate_plots_from_dtree_output()
+#frame_grob <- generate_plots_from_dtree_output()
 #At threshold = 2, the decision tree algorithm does not generate any real tree at all since 
 #only 4% of the vehicles have more than 2 defects
 #win_len_and_score <- find_optimal_window_for_training_model_by_month(threshold = 2)
 #plot_win_len_and_score()
 #utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
 #check_weekly_windows(threshold = 0)
-#win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 0)
+optimal_window_length <- find_optimal_window_for_training_model_by_week(threshold = 2)
 #defect_distribution()

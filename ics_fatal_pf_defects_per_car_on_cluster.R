@@ -372,6 +372,17 @@ compute_utility_score <- function(input_data, data_mode, df_features_cutpoints, 
   unacc$which_side <- ifelse((substr(unacc$tree_node, 1, 2) == ' >'), "greater_than", "less_than")
   unacc <- unacc[, c("feature", "which_side", "perc")]
   unacc_wide <- dcast(unacc, feature ~ which_side, value.var = "perc")
+  #It is possible that the column greater_than or less_than may not appear in unacc_wide, depending on the
+  #data and the threshold. Check for those conditions and handle.
+  if (!("less_than" %in% colnames(unacc_wide)))
+  {
+    unacc_wide$less_than <- 0
+  }  
+  if (!("greater_than" %in% colnames(unacc_wide)))
+  {
+    unacc_wide$greater_than <- 0
+  }
+  #The following two lines will replace values in columns greater_than or less_than by 0 if they are NA
   unacc_wide$greater_than[is.na(unacc_wide$greater_than)] <- 0
   unacc_wide$less_than[is.na(unacc_wide$less_than)] <- 0
   #utility <- sum(abs(unacc_wide$greater_than - unacc_wide$less_than))
@@ -444,7 +455,7 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
   print(win_len_and_score)
   filename <- paste(filepath_prefix, "win_len_and_score.csv", sep = "")
   write.table(win_len_and_score, file = filename, sep = ",", row.names = FALSE, col.names = TRUE)
-  win_len_and_score
+  win_len_and_score[which.max(win_len_and_score$final_score), "win_len"]
 }
 
 
@@ -530,7 +541,7 @@ align_multiline_in_plot <- function()
 #plot_win_len_and_score()
 #utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
 #check_weekly_windows(threshold = 0)
-#win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 0)
+optimal_window_length <- find_optimal_window_for_training_model_by_week(threshold = 3)
 #defect_distribution()
 #embed_summary_text_in_plot()
-align_multiline_in_plot()
+#align_multiline_in_plot()
