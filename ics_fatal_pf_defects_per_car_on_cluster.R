@@ -174,14 +174,14 @@ bar_plots_for_AP_variables <- function(data_mode, input_data, feature, cutpoint)
     paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\primer\\",
           feature, "_", cutpoint, "_", data_mode, ".png", sep = "")
   png(image_file, width = 600, height = 480, units = "px")
-  cbbPalette <- c("#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+  cbbPalette <- c("#00E62E", "#E60000", "#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
   p <- ggplot(pdpc_trans, aes(x = factor(tree_node), y = perc, fill = defect_report)) +
     geom_bar(stat = "identity", width = 0.7) + 
 	#In ggplot_2.2.0, fill order is based on the order of the factor levels. 
 	#The default order will plot the first level at the top of the stack instead of the bottom. 
 	#If you want the first level at the bottom of the stack, use position_stack(reverse = TRUE).
 	geom_col(position = position_stack(reverse = TRUE)) + 
-	geom_text(aes(label = caption, y = pos), size = 4, colour = "red", fontface = "bold") + scale_fill_manual(values = cbbPalette) + 
+	geom_text(aes(label = caption, y = pos), size = 4, colour = "black", fontface = "bold") + scale_fill_manual(values = cbbPalette) + 
     labs(x = paste("Range for ", feature, sep = ""), y = feature) + ggtitle(feature) + 
     theme(axis.text.x = element_text(size = 12, color = 'black', face = 'bold'),
           axis.text.y = element_text(size = 12, color = 'black', face = 'bold'),
@@ -486,13 +486,34 @@ embed_summary_text_in_plot <- function()
   image_file <- 
      "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\primer_summary_text.png"
   png(image_file, width = 600, height = 480, units = "px")
-  
-  text = generate_summary_text(pdpc_trans, "TH_AH_2_Temp", 641.6667)
-  p <- ggplot() + annotate("text", x = 4, y = 25, size = 8, label = text) + theme_bw() + 
+  summary_string <- ""
+  for (i in 1:4)
+  {
+    summary_string <- paste(summary_string, "\n", generate_summary_text(pdpc_trans, "TH_AH_2_Temp", 641.6667), sep = "")
+  }
+  p <- ggplot() + annotate("text", x = 4, y = 25, size = 8, label = summary_string) + theme_bw() + 
 	       theme(axis.line = element_blank(), axis.text.x = element_blank(),
                  axis.text.y = element_blank(),axis.ticks = element_blank(),
                  axis.title.x = element_blank(),
                  axis.title.y = element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+  print(p)
+  dev.off()
+}
+
+align_multiline_in_plot <- function()
+{
+  image_file <- 
+     "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\multiline_text.png"
+  png(image_file, width = 600, height = 480, units = "px")
+  summary_string <- "abcdef\nabcdefghijk\nabcdefghijklmnop\nabcdefghijklmnopqrstuvwxyz"
+  p <- ggplot() + annotate("text", 
+                           x = 0.05, y = 25, 
+						   size = 8, hjust = 0, label = summary_string) + xlim(0,1) + theme_bw() + 
+	         theme(axis.line = element_blank(), axis.text.x = element_blank(),
+                  axis.text.y = element_blank(),axis.ticks = element_blank(),
+                 axis.title.x = element_blank(),
+                 axis.title.y = element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+				 panel.spacing.x = unit(-50.0, "lines"))
   print(p)
   dev.off()
 }
@@ -511,4 +532,5 @@ embed_summary_text_in_plot <- function()
 #check_weekly_windows(threshold = 0)
 #win_len_and_score <- find_optimal_window_for_training_model_by_week(threshold = 0)
 #defect_distribution()
-embed_summary_text_in_plot()
+#embed_summary_text_in_plot()
+align_multiline_in_plot()
