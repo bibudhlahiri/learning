@@ -122,7 +122,7 @@ defect_distribution <- function()
   dev.off()
 }
 
-el_yunque <- function(input_data, F = 5, T = 50)
+create_decision_tree <- function(input_data, F = 5, T = 50)
 {
   #Save the output trees in a file named by the timestamp at which it is generated, so that multiple runs do not overwrite results
   timestr <- as.character(Sys.time())
@@ -180,24 +180,22 @@ bar_plots_for_AP_variables <- function(data_mode, input_data, feature, cutpoint)
 
 barplot_grid_view_from_tree_output <- function(data_mode, input_data, df_features_cutpoints, how_many = 4)
 {
-  gp1 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[1, "feature"], df_features_cutpoints[1, "cutpoint"])))
-  gp2 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[2, "feature"], df_features_cutpoints[2, "cutpoint"])))
-  gp3 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[3, "feature"], df_features_cutpoints[3, "cutpoint"])))
-  gp4 <- ggplot_gtable(ggplot_build(bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[4, "feature"], df_features_cutpoints[4, "cutpoint"])))
-  
-  frame_grob <- grid.arrange(gp1, gp2, gp3, gp4, ncol = 2
-                             #, heights = rep(3, 3), widths = rep(10,3), padding = unit(5.0, "line")
-                            )
-  grob <- grid.grab()
-  
-  image_file <- 
-  paste("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\figures\\ICSDefectDataC\\output_from_decision_tree\\top_coat\\barplot_grid_view_",
-        data_mode, ".png", sep = "")
-  png(image_file, width = 700, height = 700)
-  grid.newpage()
-  grid.draw(grob)
-  dev.off()
-  frame_grob
+  if (how_many > 0)
+  {
+    plots = lapply(1:how_many, 
+                   function(i) bar_plots_for_AP_variables(data_mode, input_data, df_features_cutpoints[i, "feature"], df_features_cutpoints[i, "cutpoint"]))
+				   #data_mode was missing in this call
+    return(do.call(grid.arrange, plots))
+  }
+  else 
+  {
+    text = "\nNo significant pattern found for the given input\n"
+    return(ggplot() + annotate("text", x = 4, y = 25, size = 8, label = text) + theme_bw() + 
+	       theme(axis.line = element_blank(), axis.text.x = element_blank(),
+                 axis.text.y = element_blank(),axis.ticks = element_blank(),
+                 axis.title.x = element_blank(),
+                 axis.title.y = element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank()))
+  }
 }
 
 #Convert the outliers of each column (outlier is any point that is less than the 25% quartile minus 1.5 times the IQR 
@@ -323,20 +321,20 @@ generate_plots_from_dtree_output <- function(first_day_of_shutdown = "2016-12-23
   #Eliminate data corresponding to shutdown period (2016-12-23 to 2017-01-02)
   historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
   
-  model_file <- el_yunque(historical_data, F = 5, T = 50)
+  model_file <- create_decision_tree(historical_data, F = 5, T = 50)
   df_features_cutpoints <- parse_tree_output(model_file)
     
   recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-02-02") & (manuf_date <= "2017-02-08")))  #Does not depend on window size
   df_features_cutpoints <- check_df_features_cutpoints(df_features_cutpoints, recent_data)
-    
-  #Writing to file is taken care of within barplot_grid_view_from_tree_output()
-  frame_grob <- barplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints)
-  #frame_grob <- boxplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints)
   
+  hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #What if we do not get even 4 features?
+  df_features_cutpoints <- df_features_cutpoints[1:hmfp, ]
+  #Writing to file is taken care of within barplot_grid_view_from_tree_output()
+  frame_grob <- barplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints, hmfp)
+    
   #Validate the tree models on last one week's data using the bar plot for now
   
   frame_grob <- barplot_grid_view_from_tree_output(data_mode = "recent", recent_data, df_features_cutpoints)
-  #frame_grob <- boxplot_grid_view_from_tree_output(data_mode = "recent", recent_data, df_features_cutpoints)
 }
 
 
@@ -432,7 +430,7 @@ find_optimal_window_for_training_model_by_month <- function(window_end = "2016-1
     cat(paste("i = ", i, ", start_date = ", start_date, "\n", sep = ""))  
     historical_data <- subset(tc_defects_per_car, ((manuf_date >= start_date) & (manuf_date <= window_end)))  
     #Build tree model on historical data
-    model_file <- el_yunque(historical_data)
+    model_file <- create_decision_tree(historical_data)
     #Get the variables used for splitting the root nodes, their cut-points and statistic values
     df_features_cutpoints <- parse_tree_output(model_file)
 	win_len_and_score[i, "generalization_score"] <- score_window_size(historical_data, recent_data, df_features_cutpoints)
@@ -477,7 +475,7 @@ check_weekly_windows <- function(threshold = 0)
   #historical_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-01-12") & (manuf_date < "2017-02-02")))
   
   #Build tree model on historical data
-  model_file <- el_yunque(historical_data)
+  model_file <- create_decision_tree(historical_data)
   #Get the variables used for splitting the root nodes, their cut-points and statistic values
   df_features_cutpoints <- parse_tree_output(model_file)
   generalization_score <- score_window_size(historical_data, recent_data, df_features_cutpoints)
@@ -519,7 +517,7 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
 	historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
 	
     #Build tree model on historical data
-    model_file <- el_yunque(historical_data)
+    model_file <- create_decision_tree(historical_data)
     #Get the variables used for splitting the root nodes, their cut-points and statistic values
     df_features_cutpoints <- parse_tree_output(model_file)
 	hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #Not getting even 4 features when threshold = 2
@@ -537,10 +535,52 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
   win_len_and_score[which.max(win_len_and_score$final_score), "win_len"]
 }
 
+check_powerBI_latest_data <- function(first_day_of_shutdown = "2016-12-23", last_day_of_shutdown = "2017-01-02", 
+                                             history_win_in_weeks = 5, window_end = "2017-02-23", threshold = 0)
+{
+  filename <- "C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\data\\Phase2\\ICSDefectDataC\\input_df_25cb343e-7613-47e8-9e08-507ef337163e\\input_df_25cb343e-7613-47e8-9e08-507ef337163e.csv"
+  tc_defects_per_car <- read.csv(filename, header = T, stringsAsFactors = F) 
+  tc_defects_per_car$defect_report <- ifelse((tc_defects_per_car$tot_paint_defects <= threshold), "Acceptable", "Unacceptable")
+  tc_defects_per_car$defect_report <- as.factor(tc_defects_per_car$defect_report)
+  names(tc_defects_per_car)[names(tc_defects_per_car) == 'mfg_date'] <- 'manuf_date'
+  tc_defects_per_car$manuf_date <- as.character(tc_defects_per_car$manuf_date)
+  tc_defects_per_car <- tc_defects_per_car[, sapply(tc_defects_per_car, function(col) !((length(unique(col)) == 1) && (unique(col) == -9999999)))]
+  tc_defects_per_car <- tc_defects_per_car[, !(colnames(tc_defects_per_car) %in% c("paint_type", "tot_paint_defects", "historical_window_value"))]
+      
+  start_date <- as.character(seq(as.Date(window_end), length = 2, by = paste("-", (7*history_win_in_weeks-1), " days", sep = ""))[2])
+  #If the start_date computed initially falls on or before the shutdown, check how many days we are losing because of shutdown, and 
+  #adjust those many days from days before shutdown. Shutdown was for 11 days, including both ends.
+  revised_start_date <- start_date
+  if (start_date <= last_day_of_shutdown)
+  {
+    lost_days <- as.numeric(difftime(as.Date(last_day_of_shutdown, '%Y-%m-%d'), as.Date(start_date, '%Y-%m-%d'), units = c("days"))) + 1
+    last_day_before_shutdown <- as.character(seq(as.Date(first_day_of_shutdown), length = 2, by = "-1 days")[2])
+    revised_start_date <-  as.character(seq(as.Date(last_day_before_shutdown), length = 2, by = paste("-", (lost_days - 1), " days", sep = ""))[2])
+  }
+  cat(paste("start_date = ", start_date, ", revised_start_date = ", revised_start_date, "\n", sep = ""))  
+  historical_data <- subset(tc_defects_per_car, ((manuf_date >= revised_start_date) & (manuf_date <= window_end))) 
+  #Eliminate data corresponding to shutdown period (2016-12-23 to 2017-01-02)
+  historical_data <- subset(historical_data, !((manuf_date >= first_day_of_shutdown) & (manuf_date <= last_day_of_shutdown)))
+  
+  model_file <- create_decision_tree(historical_data, F = 5, T = 50)
+  df_features_cutpoints <- parse_tree_output(model_file)
+  df_features_cutpoints <- check_df_features_cutpoints(df_features_cutpoints, recent_data)
+  hmfp <- min(4, length(unique(df_features_cutpoints$feature))) #What if we do not get even 4 features?
+  df_features_cutpoints <- df_features_cutpoints[1:hmfp, ]
+  
+  #Writing to file is taken care of within barplot_grid_view_from_tree_output()
+  frame_grob <- barplot_grid_view_from_tree_output(data_mode = "historical", historical_data, df_features_cutpoints, hmfp)
+    
+  #Validate the tree models on last one week's data using the bar plot for now
+  recent_data <- subset(tc_defects_per_car, ((manuf_date >= "2017-02-24") & (manuf_date <= "2017-03-02")))  #Does not depend on window size
+  frame_grob <- barplot_grid_view_from_tree_output(data_mode = "recent", recent_data, df_features_cutpoints, hmfp)
+  #frame_grob <- boxplot_grid_view_from_tree_output(data_mode = "recent", recent_data, df_features_cutpoints)
+}
+
 #source("C:\\Users\\blahiri\\Toyota\\Paint_Shop_Optimization\\code_local\\ics_fatal_top_coat_defects_per_car.R")
 #median_CV_by_var <- top_coat_analysis_per_car_process_variable()
 #tc_defects_per_car <- create_per_vehicle_averages()
-#dtree <- el_yunque(threshold = 0)
+#dtree <- create_decision_tree(threshold = 0)
 #Note the filename before running generate_plots_from_dtree_output()
 #frame_grob <- generate_plots_from_dtree_output()
 #At threshold = 2, the decision tree algorithm does not generate any real tree at all since 
@@ -549,5 +589,6 @@ find_optimal_window_for_training_model_by_week <- function(first_day_of_shutdown
 #plot_win_len_and_score()
 #utility <- compute_utility_score(history_win_in_months = 12, threshold = 0)
 #check_weekly_windows(threshold = 0)
-optimal_window_length <- find_optimal_window_for_training_model_by_week(threshold = 2)
+#optimal_window_length <- find_optimal_window_for_training_model_by_week(threshold = 2)
 #defect_distribution()
+check_powerBI_latest_data()
